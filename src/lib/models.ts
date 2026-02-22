@@ -170,6 +170,10 @@ export const State = {
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
     mousePosition: Vec2.ZERO, // World-space mouse position
+	arenaBounds: {
+		center: Vec2.ZERO,
+		halfSize: new Vec2(100, 100)
+	} as Rect,
 };
 
 /// Data that is persisted to the save file.
@@ -182,6 +186,8 @@ export function updatePhysics(deltaSeconds: number) {
 	// Move player forward
 	const movement = State.facingDirection.scale(PHYSICS.PLAYER_MOVING_UNITS_PER_SECOND * deltaSeconds);
 	State.playerPosition = State.playerPosition.add(movement);
+	// Clamp player to arena
+	State.playerPosition = clampPointToRect(State.playerPosition, State.arenaBounds);
 }
 
 export function updateAll(deltaSeconds: number) {
