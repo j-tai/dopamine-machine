@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {State, COLORS} from "$lib/models";
+    import {State, COLORS, Vec2} from "$lib/models";
     import {onMount} from "svelte";
 
     let canvas: HTMLCanvasElement;
