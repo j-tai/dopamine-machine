@@ -73,6 +73,47 @@ export class Vec2 {
 		if (len === 0) return Vec2.ZERO;
 		return this.scale(1 / len);
 	}
+
+    public angle(): number {
+        return Math.atan2(this.y, this.x);
+    }
+
+    public static fromAngle(radians: number): Vec2 {
+        return new Vec2(Math.cos(radians), Math.sin(radians));
+    }
+}
+
+/**
+ * Smoothly rotates a unit vector towards a target direction.
+ * * Guarantees:
+ * 1. Returns a valid unit vector even if inputs are Zero or NaN.
+ * 2. If target is invalid/zero, returns the normalized original.
+ * 3. Limits rotation by max_radians, choosing the shortest arc (clockwise vs counter-clockwise).
+ * 4. If the angle to target is less than max_radians, it snaps exactly to the target to prevent jitter.
+ * * @param original The current direction vector.
+ * @param target The desired direction vector.
+ * @param max_radians Maximum rotation allowed in this step.
+ */
+export function turnUnitVectorToward(original: Vec2, target: Vec2, max_radians: number): Vec2 {
+    const start = original.length() < 1e-9 ? new Vec2(1, 0) : original.normalize();
+    const dest = target.length() < 1e-9 ? start : target.normalize();
+
+    const startAngle = start.angle();
+    const destAngle = dest.angle();
+
+    // Find the shortest signed difference between angles (-PI to PI)
+    let diff = destAngle - startAngle;
+    while (diff > Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+
+    // If within reach, snap to target
+    if (Math.abs(diff) <= max_radians) {
+        return dest;
+    }
+
+    // Otherwise, turn as much as allowed in the correct direction
+    const actualTurn = Math.sign(diff) * max_radians;
+    return Vec2.fromAngle(startAngle + actualTurn);
 }
 
 /// The singleton game state.
