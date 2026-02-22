@@ -16,7 +16,7 @@
 
         // Set up camera
         ctx.resetTransform();
-        ctx.translate(500, 500);
+        ctx.translate(canvas.width*0.5, canvas.height*0.5);
         ctx.scale(cameraScale, -cameraScale);
 
         ctx.fillStyle = 'red';
