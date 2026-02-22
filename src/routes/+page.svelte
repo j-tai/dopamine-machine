@@ -24,6 +24,29 @@
         ctx.scale(cameraScale, -cameraScale);
 
         drawPlayer(ctx);
+        drawCrosshair(ctx);
+    }
+
+    function drawCrosshair(ctx: CanvasRenderingContext2D) {
+        const { x, y } = State.mousePosition;
+        const size = 4; // Half-length of the crosshair lines
+
+        ctx.save();
+        ctx.translate(x, y);
+        
+        ctx.strokeStyle = COLORS.CROSSHAIR;
+        ctx.lineWidth = 1 / cameraScale; // Keep lines thin regardless of scale
+        
+        ctx.beginPath();
+        // Horizontal line
+        ctx.moveTo(-size, 0);
+        ctx.lineTo(size, 0);
+        // Vertical line
+        ctx.moveTo(0, -size);
+        ctx.lineTo(0, size);
+        ctx.stroke();
+
+        ctx.restore();
     }
 
     function drawPlayer(ctx: CanvasRenderingContext2D) {
