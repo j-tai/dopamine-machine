@@ -4,9 +4,9 @@ export type Edge = [number, number];
  * Global Visual Constants
  */
 export const COLORS = {
-    BACKGROUND: '#1a1a1a',
-    PLAYER: '#00ffcc',
-    CROSSHAIR: '#ff4444'
+    BACKGROUND: '#340d0dff',
+    PLAYER: '#d81b1bff',
+    CROSSHAIR: '#d81b1bff'
 };
 
 /**
