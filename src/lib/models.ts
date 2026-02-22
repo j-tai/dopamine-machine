@@ -132,7 +132,7 @@ export function clampPointToRect(point: Vec2, rect: Rect): Vec2 {
 export type Bullet = {
 	position: Vec2,
 	velocity: Vec2,
-	lifetime: number,
+	lifetime: number, // seconds remaining
 }
 
 /**
