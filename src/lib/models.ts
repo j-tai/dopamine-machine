@@ -13,7 +13,8 @@ export const COLORS = {
  * Global Physics Constants
  */
 export const PHYSICS = {
-	PLAYER_TURNING_RADIANS_PER_SECOND: 6
+	PLAYER_TURNING_RADIANS_PER_SECOND: 6,
+	PLAYER_MOVING_UNITS_PER_SECOND: 100,
 }
 
 /// A 2D vector.
@@ -145,6 +146,9 @@ export function updatePhysics(deltaSeconds: number) {
 	// Turn player toward mouse
 	const toMouse = State.mousePosition.sub(State.playerPosition);
 	State.facingDirection = turnUnitVectorToward(State.facingDirection, toMouse, PHYSICS.PLAYER_TURNING_RADIANS_PER_SECOND * deltaSeconds);
+	// Move player forward
+	const movement = State.facingDirection.scale(PHYSICS.PLAYER_MOVING_UNITS_PER_SECOND * deltaSeconds);
+	State.playerPosition = State.playerPosition.add(movement);
 }
 
 export function updateAll(deltaSeconds: number) {
