@@ -1,5 +1,13 @@
 export type Edge = [number, number];
 
+/**
+ * Global Visual Constants
+ */
+export const COLORS = {
+    BACKGROUND: '#1a1a1a',
+    PLAYER: '#00ffcc'
+} as const;
+
 /// A 2D vector.
 export class Vec2 {
 	public static readonly ZERO = new Vec2(0, 0);
@@ -78,13 +86,6 @@ export const State = {
 
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
-/**
- * Global Visual Constants
- */
-export const COLORS = {
-    BACKGROUND: '#1a1a1a',
-    PLAYER: '#00ffcc'
-} as const;
 };
 
 /// Data that is persisted to the save file.
