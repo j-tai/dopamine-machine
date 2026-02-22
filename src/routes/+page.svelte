@@ -1,8 +1,6 @@
 <script lang="ts">
-    import {State} from "$lib/models";
+    import {State, COLORS} from "$lib/models";
     import {onMount} from "svelte";
-    import { State, COLORS } from "./models";
-    import { onMount } from "svelte";
 
     let canvas: HTMLCanvasElement;
 

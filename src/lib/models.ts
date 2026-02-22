@@ -6,7 +6,7 @@ export type Edge = [number, number];
 export const COLORS = {
     BACKGROUND: '#1a1a1a',
     PLAYER: '#00ffcc'
-} as const;
+};
 
 /// A 2D vector.
 export class Vec2 {
