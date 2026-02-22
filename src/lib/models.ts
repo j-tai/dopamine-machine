@@ -8,6 +8,7 @@ export const COLORS = {
     PLAYER: '#d81b1bff',
     CROSSHAIR: '#d81b1bff',
 	PLAYER_BULLET: '#d81b1bff',
+	ENEMY_COLOR_BY_RANK: ['#b563f0ff', '#6024d9ff', '#358eedff', '#3ceaf3ff'],
 };
 
 /**
@@ -136,6 +137,17 @@ export type Bullet = {
 }
 
 /**
+ * Basic enemies don't fight back.
+ */
+export type BasicEnemy = {
+	rank: number, // 0-indexed. 0 is the weakest
+	position: Vec2,
+	facingDirection: Vec2,
+	maxHealth: number,
+	currentHealth: number,
+}
+
+/**
  * Smoothly rotates a unit vector towards a target direction.
  * * Guarantees:
  * 1. Returns a valid unit vector even if inputs are Zero or NaN.
@@ -172,7 +184,7 @@ export function turnUnitVectorToward(original: Vec2, target: Vec2, max_radians: 
 export const State = {
 	/// The data that is persisted to the save file.
 	save: {
-		money: 0,
+		gold: 0,
 		dependencyGraph: [] as Edge[],
 		obtainedUpgrades: [] as boolean[],
 	},
@@ -186,6 +198,10 @@ export const State = {
 	} as Rect,
 	playerBullets: [] as Bullet[],
 	playerShootingCharge: 0,
+	basicEnemies: [] as BasicEnemy[],
+	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
+	basicEnemySpeedByRank: [10, 20, 35, 60],
+	basicEnemyGoldRewardByRank: [1, 3, 10, 50],
 };
 
 /// Data that is persisted to the save file.
