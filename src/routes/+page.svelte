@@ -60,19 +60,23 @@
         requestAnimationFrame(runAnimationFrame);
     }
 
-    onMount(runAnimationFrame);
+    onMount(() => {
+        const loop = requestAnimationFrame(runAnimationFrame);
+        return () => cancelAnimationFrame(loop);
+    });
 </script>
 
-<svelte:body on:keydown={onKey}/>
+<svelte:window on:keydown={onKey} />
 
-<canvas bind:this={canvas} width={1000} height={1000}></canvas>
+<canvas bind:this={canvas}></canvas>
 
 <style>
     canvas {
         position: fixed;
         top: 0;
         left: 0;
-        bottom: 0;
-        right: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
     }
 </style>
