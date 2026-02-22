@@ -127,6 +127,7 @@ export const State = {
 
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
+    mousePosition: Vec2.ZERO, // World-space mouse position
 };
 
 /// Data that is persisted to the save file.

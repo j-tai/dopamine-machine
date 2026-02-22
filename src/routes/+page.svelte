@@ -53,6 +53,19 @@
 
     }
 
+    function handleMouseMove(event: MouseEvent) {
+        // Convert screen space to world space
+        // 1. Center origin
+        let worldX = event.clientX - window.innerWidth / 2;
+        let worldY = event.clientY - window.innerHeight / 2;
+        
+        // 2. Adjust for camera scale and inverted Y axis
+        worldX /= cameraScale;
+        worldY /= -cameraScale;
+
+        State.mousePosition = new Vec2(worldX, worldY);
+    }
+
     function runAnimationFrame() {
         render();
         requestAnimationFrame(runAnimationFrame);
@@ -64,7 +77,7 @@
     });
 </script>
 
-<svelte:window on:keydown={onKey} />
+<svelte:window on:keydown={onKey} on:mousemove={handleMouseMove} />
 
 <canvas bind:this={canvas}></canvas>
 
