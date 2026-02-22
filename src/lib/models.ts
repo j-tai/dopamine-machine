@@ -92,6 +92,39 @@ export class Vec2 {
     }
 }
 
+// Center and extents
+export type Rect = {
+	center: Vec2,
+	halfSize: Vec2,
+};
+
+export type RectBounds = {
+	min: Vec2,
+	max: Vec2,
+};
+
+export function rectToBounds(rect: Rect): RectBounds {
+	return {
+		min: rect.center.sub(rect.halfSize),
+		max: rect.center.add(rect.halfSize),
+	};
+}
+
+export function boundsToRect(bounds: RectBounds): Rect {
+	return {
+		center: bounds.min.add(bounds.max).scale(0.5),
+		halfSize: bounds.max.sub(bounds.min).scale(0.5),
+	};
+}
+
+export function clampPointToRect(point: Vec2, rect: Rect): Vec2 {
+	const bounds = rectToBounds(rect);
+	return new Vec2(
+		Math.max(bounds.min.x, Math.min(bounds.max.x, point.x)),
+		Math.max(bounds.min.y, Math.min(bounds.max.y, point.y))
+	);
+}
+
 /**
  * Smoothly rotates a unit vector towards a target direction.
  * * Guarantees:
