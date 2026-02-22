@@ -6,7 +6,8 @@ export type Edge = [number, number];
 export const COLORS = {
     BACKGROUND: '#340d0dff',
     PLAYER: '#d81b1bff',
-    CROSSHAIR: '#d81b1bff'
+    CROSSHAIR: '#d81b1bff',
+	PLAYER_BULLET: '#d81b1bff',
 };
 
 /**
@@ -15,6 +16,9 @@ export const COLORS = {
 export const PHYSICS = {
 	PLAYER_TURNING_RADIANS_PER_SECOND: 6,
 	PLAYER_MOVING_UNITS_PER_SECOND: 100,
+	PLAYER_SECONDS_PER_SHOT: 0.5,
+	PLAYER_BULLET_SPEED: 400,
+	PLAYER_BULLET_LIFETIME_SECONDS: 1.0,
 }
 
 /// A 2D vector.
@@ -125,6 +129,12 @@ export function clampPointToRect(point: Vec2, rect: Rect): Vec2 {
 	);
 }
 
+export type Bullet = {
+	position: Vec2,
+	velocity: Vec2,
+	lifetime: number,
+}
+
 /**
  * Smoothly rotates a unit vector towards a target direction.
  * * Guarantees:
@@ -174,10 +184,18 @@ export const State = {
 		center: Vec2.ZERO,
 		halfSize: new Vec2(100, 100)
 	} as Rect,
+	playerBullets: [] as Bullet[],
+	playerShootingCharge: 0,
 };
 
 /// Data that is persisted to the save file.
 export type SaveData = typeof State.save;
+
+export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
+	bullet.position = bullet.position.add(bullet.velocity.scale(deltaSeconds));
+	bullet.lifetime -= deltaSeconds;
+	return bullet;
+}
 
 export function updatePhysics(deltaSeconds: number) {
 	// Turn player toward mouse
@@ -188,6 +206,23 @@ export function updatePhysics(deltaSeconds: number) {
 	State.playerPosition = State.playerPosition.add(movement);
 	// Clamp player to arena
 	State.playerPosition = clampPointToRect(State.playerPosition, State.arenaBounds);
+	// Should the player shoot?
+	State.playerShootingCharge += deltaSeconds;
+	while(State.playerShootingCharge >= PHYSICS.PLAYER_SECONDS_PER_SHOT) {
+		State.playerShootingCharge -= PHYSICS.PLAYER_SECONDS_PER_SHOT;
+		let bullet = {
+			position: State.playerPosition,
+			velocity: State.facingDirection.scale(PHYSICS.PLAYER_BULLET_SPEED),
+			lifetime: PHYSICS.PLAYER_BULLET_LIFETIME_SECONDS,
+		};
+		State.playerBullets.push(bullet);
+		// apply excess time immediately
+		bullet = updateBullet(State.playerShootingCharge, bullet);
+	}
+	// Update bullets and remove expired ones
+	State.playerBullets = State.playerBullets
+		.map(bullet => updateBullet(deltaSeconds, bullet))
+		.filter(bullet => bullet.lifetime > 0);
 }
 
 export function updateAll(deltaSeconds: number) {

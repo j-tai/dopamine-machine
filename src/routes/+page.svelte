@@ -4,7 +4,7 @@
 
     let canvas: HTMLCanvasElement;
 
-    const cameraScale = 4;
+    const cameraScale = 2;
 
     let lastTime = 0;
 
@@ -25,6 +25,7 @@
         ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
         ctx.scale(cameraScale, -cameraScale);
 
+        drawBullets(ctx);
         drawPlayer(ctx);
         drawCrosshair(ctx);
     }
@@ -48,6 +49,26 @@
         ctx.lineTo(0, size);
         ctx.stroke();
 
+        ctx.restore();
+    }
+                                                                                                                                                                                                                                                                                                    
+    function drawBullets(ctx: CanvasRenderingContext2D) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.PLAYER_BULLET;
+        ctx.lineWidth = 4 / cameraScale;
+        ctx.lineCap = 'round';
+
+        for (const bullet of State.playerBullets) {
+            const tracerLength = 0.05 * Math.min(0.5, bullet.lifetime); // seconds of length
+            const tracerDelta = bullet.velocity.scale(tracerLength);
+            const tail = bullet.position.sub(tracerDelta);
+            const head = bullet.position.add(tracerDelta)
+
+            ctx.beginPath();
+            ctx.moveTo(head.x, head.y);
+            ctx.lineTo(tail.x, tail.y);
+            ctx.stroke();
+        }
         ctx.restore();
     }
 
