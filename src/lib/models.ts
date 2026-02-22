@@ -1,4 +1,5 @@
 export type Edge = [number, number];
+export type Polynomial = number[]; // coefficients, lowest power first. E.g. [1, 0, 2] is 1 + 0*x + 2*x^2
 
 /**
  * Global Visual Constants
@@ -184,7 +185,8 @@ export function turnUnitVectorToward(original: Vec2, target: Vec2, max_radians: 
 export const State = {
 	/// The data that is persisted to the save file.
 	save: {
-		gold: 0,
+		/// how much of each currency you own
+		basicRankCurrency: [] as Polynomial,
 		dependencyGraph: [] as Edge[],
 		obtainedUpgrades: [] as boolean[],
 	},
@@ -201,7 +203,6 @@ export const State = {
 	basicEnemies: [] as BasicEnemy[],
 	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
 	basicEnemySpeedByRank: [10, 20, 35, 60],
-	basicEnemyGoldRewardByRank: [1, 3, 10, 50],
 };
 
 /// Data that is persisted to the save file.
