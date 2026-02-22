@@ -35,7 +35,7 @@
         ctx.translate(x, y);
         
         ctx.strokeStyle = COLORS.CROSSHAIR;
-        ctx.lineWidth = 1 / cameraScale; // Keep lines thin regardless of scale
+        ctx.lineWidth = 4 / cameraScale; // Keep lines thin regardless of scale
         
         ctx.beginPath();
         // Horizontal line
