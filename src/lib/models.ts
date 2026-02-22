@@ -9,6 +9,13 @@ export const COLORS = {
     CROSSHAIR: '#ff4444'
 };
 
+/**
+ * Global Physics Constants
+ */
+export const PHYSICS = {
+	PLAYER_TURNING_RADIANS_PER_SECOND: 6
+}
+
 /// A 2D vector.
 export class Vec2 {
 	public static readonly ZERO = new Vec2(0, 0);
@@ -133,3 +140,13 @@ export const State = {
 
 /// Data that is persisted to the save file.
 export type SaveData = typeof State.save;
+
+export function updatePhysics(deltaSeconds: number) {
+	// Turn player toward mouse
+	const toMouse = State.mousePosition.sub(State.playerPosition);
+	State.facingDirection = turnUnitVectorToward(State.facingDirection, toMouse, PHYSICS.PLAYER_TURNING_RADIANS_PER_SECOND * deltaSeconds);
+}
+
+export function updateAll(deltaSeconds: number) {
+	updatePhysics(Math.min(deltaSeconds, 0.1));
+}

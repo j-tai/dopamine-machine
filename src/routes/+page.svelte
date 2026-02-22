@@ -1,10 +1,12 @@
 <script lang="ts">
-    import {State, COLORS, Vec2} from "$lib/models";
+    import {State, COLORS, Vec2, updateAll} from "$lib/models";
     import {onMount} from "svelte";
 
     let canvas: HTMLCanvasElement;
 
     const cameraScale = 4;
+
+    let lastTime = 0;
 
     function render() {
         canvas.width = window.innerWidth;
@@ -89,7 +91,14 @@
         State.mousePosition = new Vec2(worldX, worldY);
     }
 
-    function runAnimationFrame() {
+    function runAnimationFrame(currentTime: number) {
+        // Calculate delta time in seconds (ms / 1000)
+        // Initialize lastTime on the first frame to avoid a massive jump
+        if (!lastTime) lastTime = currentTime;
+        const dt = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+
+        updateAll(dt);
         render();
         requestAnimationFrame(runAnimationFrame);
     }
