@@ -21,6 +21,7 @@ export const COLORS = {
     CROSSHAIR: '#d81b1bff',
 	PLAYER_BULLET: '#d81b1bff',
 	ENEMY_COLOR_BY_RANK: ['#b563f0ff', '#6024d9ff', '#358eedff', '#3ceaf3ff'],
+	BACKGROUND_UPGRADES: '#130b3fff',
 };
 
 /**

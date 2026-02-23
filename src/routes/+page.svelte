@@ -19,7 +19,20 @@
         resizeCanvas(bottomCanvas);
         State.canvasWidthHeight = new Vec2(bottomCanvas.width, bottomCanvas.height);
 
-        const ctx = bottomCanvas.getContext('2d');
+        renderBottom(bottomCanvas.getContext('2d'));
+        renderTop(topCanvas.getContext('2d'));
+    }
+
+    function renderTop(ctx: CanvasRenderingContext2D) {
+        if (!ctx) return;
+        ctx.clearRect(0, 0, topCanvas.width, topCanvas.height);
+
+        // Background
+        ctx.fillStyle = COLORS.BACKGROUND_UPGRADES;
+        ctx.fillRect(0, 0, topCanvas.width, topCanvas.height);
+    }
+
+    function renderBottom(ctx: CanvasRenderingContext2D) {
         if (!ctx) return;
         ctx.clearRect(0, 0, bottomCanvas.width, bottomCanvas.height);
 
