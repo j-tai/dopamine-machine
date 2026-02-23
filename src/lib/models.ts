@@ -36,6 +36,9 @@ export const PHYSICS = {
 	HALF_HEIGHT_FOR_ENEMIES: 8000,
 	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
 	MAX_ENEMIES_PER_ZONE: 100,
+	CAMERA_DRAG_RATE: 2,
+	CAMERA_SOFT_THRESHOLD: 100,
+	CAMERA_HARD_THRESHOLD: 300,
 };
 
 /**
@@ -277,6 +280,28 @@ export function turnUnitVectorToward(original: Vec2, target: Vec2, max_radians: 
     return Vec2.fromAngle(startAngle + actualTurn);
 }
 
+/**
+ * Drags a vector toward a target position.
+ *
+ * @param current The current position of the object.
+ * @param target The target position to drag toward.
+ * @param dragFactor The factor by which to drag the object (0 = no drag, 1 = snap to target).
+ * @param softThreshold The distance at which dragging starts to take effect. Closer than this threshold, the current vector is returned unchanged.
+ * @param hardThreshold The resulting vector is guaranteed to be at most this many units away from the target.
+ */
+export function dragVectorTowards(current: Vec2, target: Vec2, dragFactor: number, softThreshold: number, hardThreshold: number): Vec2 {
+	const toTarget = target.sub(current);
+	const toTargetLength = toTarget.length();
+	if(toTargetLength < softThreshold) {
+		return current; // within soft threshold, don't apply drag
+	}
+	if(toTargetLength > hardThreshold) {
+		return target.add(toTarget.normalize().scale(-hardThreshold)); // beyond hard threshold, clamp to hard threshold
+	}
+	const dragAmount = toTargetLength * dragFactor * (toTargetLength - softThreshold) / (hardThreshold - softThreshold); // scale drag amount based on distance within thresholds
+	return current.add(toTarget.normalize().scale(dragAmount));
+}
+
 /// The singleton game state.
 export const State = {
 	/// The data that is persisted to the save file.
@@ -287,6 +312,7 @@ export const State = {
 		obtainedUpgrades: [] as boolean[],
 	},
 
+	cameraPosition: Vec2.ZERO,
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
     mousePosition: Vec2.ZERO, // World-space mouse position
@@ -418,4 +444,5 @@ export function updatePhysics(deltaSeconds: number) {
 
 export function updateAll(deltaSeconds: number) {
 	updatePhysics(Math.min(deltaSeconds, 0.1));
+	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
 }

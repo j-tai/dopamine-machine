@@ -24,6 +24,7 @@
         ctx.resetTransform();
         ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
         ctx.scale(cameraScale, -cameraScale);
+        ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
         drawBullets(ctx);
         drawEnemies(ctx);
@@ -144,6 +145,10 @@
         // 2. Adjust for camera scale and inverted Y axis
         worldX /= cameraScale;
         worldY /= -cameraScale;
+
+        // 3. Adjust for camera location
+        worldX += State.cameraPosition.x;
+        worldY += State.cameraPosition.y;
 
         State.mousePosition = new Vec2(worldX, worldY);
     }
