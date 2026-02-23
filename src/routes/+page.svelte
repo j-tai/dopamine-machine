@@ -30,6 +30,8 @@
         // Background
         ctx.fillStyle = COLORS.BACKGROUND_UPGRADES;
         ctx.fillRect(0, 0, topCanvas.width, topCanvas.height);
+
+        drawUpgrades(ctx);
     }
 
     function renderBottom(ctx: CanvasRenderingContext2D) {
@@ -53,6 +55,35 @@
         drawCrosshair(ctx);
         ctx.resetTransform();
         drawWallet(ctx);
+    }
+
+    function drawUpgrades(ctx: CanvasRenderingContext2D) {
+	    const nodes = Array.from(State.upgradeUINodes.entries());
+        ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+
+        for(const [id, node] of nodes) {
+            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
+                const childNode = State.upgradeUINodes.get(childId);
+                ctx.beginPath();
+                ctx.moveTo(node.position.x, node.position.y);
+                ctx.lineTo(childNode.position.x, childNode.position.y);
+                ctx.stroke();
+            }
+        }
+
+        for(const [id, node] of nodes) {
+            const isObtained = State.save.obtainedUpgrades.includes(id);
+            let allPrereqsSatisfied = true;
+            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
+                allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
+            }
+            ctx.beginPath();
+            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 25 : 15), 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.UPGRADE_COLOR;
+            ctx.fill();
+        }
     }
 
     function drawWallet(ctx: CanvasRenderingContext2D) {
@@ -235,7 +266,8 @@
             splitPercent = Math.min(90, splitPercent + 10);
         }
         if (event.key === '9') {
-            regenerateDependencyGraph();
+            // Debug functionality
+            regenerateDependencyGraph(false);
         }
     }
 

@@ -11,6 +11,8 @@ export type Polynomial = number[];
 export const POLY_ZERO: Polynomial = [];
 export const POLY_ONE: Polynomial = [1];
 
+export const UPGRADES_MAX_ADDED_EDGES = 2;
+
 /**
  * Global Visual Constants
  */
@@ -22,6 +24,7 @@ export const COLORS = {
 	PLAYER_BULLET: '#d81b1bff',
 	ENEMY_COLOR_BY_RANK: ['#b563f0ff', '#6024d9ff', '#358eedff', '#3ceaf3ff'],
 	BACKGROUND_UPGRADES: '#130b3fff',
+	UPGRADE_COLOR: '#6b4fe9ff',
 };
 
 /**
@@ -105,6 +108,15 @@ export class Vec2 {
 	 */
 	public length(): number {
 		return Math.hypot(this.x, this.y);
+	}
+
+	/**
+	 * Calculates the squared length (magnitude) of a vector defined by its x and y components.
+	 *
+	 * @returns The squared length of the vector, which is more efficient to compute than the actual length. Useful for comparisons where the exact length is not needed.
+	 */
+	public lengthSq(): number {
+		return this.x * this.x + this.y * this.y;
 	}
 
 	/**
@@ -352,6 +364,10 @@ export function dragVectorTowards(current: Vec2, target: Vec2, dragFactor: numbe
 
 export const CLEAN_UPGRADE_CACHE = {
 	mainWeaponParallelShots: 1,
+	playerBulletSpeedMultiplier: 1,
+	playerFlySpeedMultiplier: 1,
+	playerTurningSpeedMultiplier: 1,
+	playerFireRateMultiplier: 1,
 };
 
 export type UpgradeCacheType = typeof CLEAN_UPGRADE_CACHE;
@@ -366,7 +382,8 @@ export const State = {
 		basicRankCurrency: [] as Polynomial,
 		/// backwards edges (aka all prerequisites) for each upgrade, used to determine which upgrades are available to purchase
 		dependencyGraph: new Map<number, number[]>(),
-		obtainedUpgrades: [] as boolean[],
+		/// ids of obtained upgrades
+		obtainedUpgrades: [] as number[],
 	},
 	upgradeCache: structuredClone(CLEAN_UPGRADE_CACHE) as UpgradeCacheType,
 
@@ -405,17 +422,37 @@ export const State = {
 	}>(),
 	/// forward edges, minimal graph. used to generate dependencyGraph
 	baseDependencyGraph: new Map<number, number[]>(),
+	/// used in the UI for automatic force directed layout of upgrades. maps IDs to nodes that can wiggle around
+	upgradeUINodes: new Map<number, { position: Vec2, velocity: Vec2 }>(),
 };
 type SaveDataType = typeof State.save;
 
+const MAP_PREFIX = '__Map__';
+
+function replacer(_key: string, value: unknown) {
+  if (value instanceof Map) {
+    return { [MAP_PREFIX]: Array.from(value.entries()) };
+  }
+  return value;
+}
+
+function reviver(_key: string, value: unknown) {
+  if (typeof value === 'object' && value !== null && MAP_PREFIX in value) {
+	const record = value as Record<string, unknown>;
+	const entries = record[MAP_PREFIX];
+	return new Map(entries as Iterable<readonly [unknown, unknown]>);
+  }
+  return value;
+}
+
 export function marshalSaveToBytes(saveData: SaveDataType): Uint8Array {
-    const jsonString = JSON.stringify(saveData);
-    return gzip(new TextEncoder().encode(jsonString));
+  const jsonString = JSON.stringify(saveData, replacer);
+  return gzip(new TextEncoder().encode(jsonString));
 }
 
 export function unmarshalSaveFromBytes(bytes: Uint8Array): SaveDataType {
-    const jsonString = ungzip(bytes, { to: 'string' });
-    return JSON.parse(jsonString);
+  const jsonString = ungzip(bytes, { to: 'string' });
+  return JSON.parse(jsonString, reviver);
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
@@ -426,14 +463,19 @@ function uint8ToBase64(bytes: Uint8Array): string {
     return btoa(binary);
 }
 
-export function autoSaveLoad(): void {
+export function save(): void {
     const currentSave = State.save;
     const currentSaveBytes = marshalSaveToBytes(currentSave);
     const currentSaveBytesBase64 = uint8ToBase64(currentSaveBytes);
+	localStorage.setItem('saveData', currentSaveBytesBase64);
+}
+
+export function autoSaveLoad(): void {
+    const currentSave = State.save;
     const storedSaveBytesBase64 = localStorage.getItem('saveData');
 
     if (!storedSaveBytesBase64) {
-        localStorage.setItem('saveData', currentSaveBytesBase64);
+        save();
         return;
     }
 
@@ -445,7 +487,7 @@ export function autoSaveLoad(): void {
     if (loadedSave.latch > currentSave.latch) {
         State.save = loadedSave;
     } else {
-        localStorage.setItem('saveData', currentSaveBytesBase64);
+        save();
     }
 }
 
@@ -458,6 +500,20 @@ export function addBaseDependency(prereqId: number, upgradeId: number): void {
 		return;
 	}
 	State.baseDependencyGraph.get(prereqId)!.push(upgradeId);
+}
+
+export function toRomanNumeral(num: number): string {
+  const values = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
+  const symbols = ['M', 'CM', 'D', 'CD', 'C', 'XC', 'L', 'XL', 'X', 'IX', 'V', 'IV', 'I'];
+
+  let result = '';
+  for (let i = 0; i < values.length; i++) {
+    while (num >= values[i]) {
+      result += symbols[i];
+      num -= values[i];
+    }
+  }
+  return result;
 }
 
 export function makeUpgradeParallelShots(nshots: number, title: string, cost: Polynomial): void {
@@ -476,15 +532,110 @@ export function makeUpgradeParallelShots(nshots: number, title: string, cost: Po
 	}
 }
 
+export function makeUpgradeBulletSpeedMultiplier(index: number): void {
+	const id = 100 + index;
+	const multiplier = 1 + 0.3 * (index + 1);
+	const title = "Bullet Speed " + toRomanNumeral(index + 1);
+	const cost = polyOneHot(index, 1500);
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Main weapon bullet speed is increased to ${multiplier * 100}%.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.playerBulletSpeedMultiplier = Math.max(State.upgradeCache.playerBulletSpeedMultiplier, multiplier);
+		},
+	});
+	if(index > 0) {
+		addBaseDependency(id - 1, id);
+	}
+}
+
+export function makeUpgradeFlySpeedMultiplier(index: number): void {
+	const id = 200 + index;
+	const multiplier = 1 + 0.3 * (index + 1);
+	const title = "Fly Speed " + toRomanNumeral(index + 1);
+	const cost = polyOneHot(index, 1500);
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Player fly speed is increased to ${multiplier * 100}%.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.playerFlySpeedMultiplier = Math.max(State.upgradeCache.playerFlySpeedMultiplier, multiplier);
+		},
+	});
+	if(index > 0) {
+		addBaseDependency(id - 1, id);
+	}
+}
+
+export function makeUpgradeTurningSpeedMultiplier(index: number): void {
+	const id = 300 + index;
+	const multiplier = 1 + 0.3 * (index + 1);
+	const title = "Turning Speed " + toRomanNumeral(index + 1);
+	const cost = polyOneHot(index, 1500);
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Player turning speed is increased to ${multiplier * 100}%.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.playerTurningSpeedMultiplier = Math.max(State.upgradeCache.playerTurningSpeedMultiplier, multiplier);
+		},
+	});
+	if(index > 0) {
+		addBaseDependency(id - 1, id);
+	}
+}
+
+export function makeUpgradeFireRateMultiplier(index: number): void {
+	const id = 400 + index;
+	const multiplier = 1 + 0.1 * (index + 1);
+	const title = "Fire Rate " + toRomanNumeral(index + 1);
+	const cost = polyOneHot(index, 5000);
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Main weapon firing rate is increased to ${multiplier * 100}%.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.playerFireRateMultiplier = Math.max(State.upgradeCache.playerFireRateMultiplier, multiplier);
+		},
+	});
+	if(index > 0) {
+		addBaseDependency(id - 1, id);
+	}
+}
+
 export function regenerateUpgradeDefinitions(): void {
 	// Fix up upgradeDefinitions and baseDependencyGraph. Safe to run multiple times
 	makeUpgradeParallelShots(2, "Double Shot", polyOneHot(0, 500));
 	makeUpgradeParallelShots(3, "Triple Shot", polyOneHot(1, 5000));
 	makeUpgradeParallelShots(4, "Quadruple Shot", polyOneHot(2, 50000));
 	makeUpgradeParallelShots(5, "Quintuple Shot", polyOneHot(3, 500000));
+	for(let i = 0; i < 4; i++) {
+		makeUpgradeBulletSpeedMultiplier(i);
+		makeUpgradeFlySpeedMultiplier(i);
+		makeUpgradeTurningSpeedMultiplier(i);
+		makeUpgradeFireRateMultiplier(i);
+	}
+	// Regenerate UI nodes, initialized to random positions
+	for (const [id, def] of State.upgradeDefinitions) {
+		// if node already exists, don't reset it
+		if(State.upgradeUINodes.has(id)) continue;
+		State.upgradeUINodes.set(id, {
+			position: new Vec2(Math.random(), Math.random()),
+			velocity: Vec2.ZERO,
+		});
+	}
 }
 
-export function regenerateDependencyGraph(): void {
+export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
+	regenerateUpgradeDefinitions();
+	if(firstTimeOnly && State.save.dependencyGraph.size > 0) {
+		return;
+	}
     // 1. Get a list of all upgrade IDs
     const allUpgradeIds = Array.from(State.upgradeDefinitions.keys());
     // 2. Shuffle the list of all upgrade IDs
@@ -511,7 +662,6 @@ export function regenerateDependencyGraph(): void {
     }
 
     // 4. Build amended graph: base edges + random new edges
-    const MAX_NEW_EDGES = 2;
     const graph = new Map<number, Set<number>>();
     for (const id of topoOrder) graph.set(id, new Set());
 
@@ -525,7 +675,7 @@ export function regenerateDependencyGraph(): void {
             if (!graph.get(topoOrder[i])!.has(topoOrder[j]))
                 candidates.push([topoOrder[i], topoOrder[j]]);
     candidates.sort(() => Math.random() - 0.5);
-    for (const [u, v] of candidates.slice(0, MAX_NEW_EDGES))
+    for (const [u, v] of candidates.slice(0, UPGRADES_MAX_ADDED_EDGES))
         graph.get(u)!.add(v);
 
     // 5. Transitive reduction
@@ -606,19 +756,20 @@ export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
 export function updatePhysics(deltaSeconds: number) {
 	// Turn player toward mouse
 	const toMouse = State.mousePosition.sub(State.playerPosition);
-	State.facingDirection = turnUnitVectorToward(State.facingDirection, toMouse, PHYSICS.PLAYER_TURNING_RADIANS_PER_SECOND * deltaSeconds);
+	State.facingDirection = turnUnitVectorToward(State.facingDirection, toMouse, PHYSICS.PLAYER_TURNING_RADIANS_PER_SECOND * deltaSeconds * State.upgradeCache.playerTurningSpeedMultiplier);
 	// Move player forward
-	const movement = State.facingDirection.scale(PHYSICS.PLAYER_MOVING_UNITS_PER_SECOND * deltaSeconds);
+	const movement = State.facingDirection.scale(PHYSICS.PLAYER_MOVING_UNITS_PER_SECOND * deltaSeconds * State.upgradeCache.playerFlySpeedMultiplier);
 	State.playerPosition = State.playerPosition.add(movement);
 	// Clamp player to arena
 	State.playerPosition = clampPointToRect(State.playerPosition, State.arenaBounds);
 	// Should the player shoot?
+	const modifiedSecondsPerShot = PHYSICS.PLAYER_SECONDS_PER_SHOT / State.upgradeCache.playerFireRateMultiplier;
 	State.playerShootingCharge += deltaSeconds;
-	while(State.playerShootingCharge >= PHYSICS.PLAYER_SECONDS_PER_SHOT) {
-		State.playerShootingCharge -= PHYSICS.PLAYER_SECONDS_PER_SHOT;
+	while(State.playerShootingCharge >= modifiedSecondsPerShot) {
+		State.playerShootingCharge -= modifiedSecondsPerShot;
 		let bullet = {
 			position: State.playerPosition,
-			velocity: State.facingDirection.scale(PHYSICS.PLAYER_BULLET_SPEED),
+			velocity: State.facingDirection.scale(PHYSICS.PLAYER_BULLET_SPEED * State.upgradeCache.playerBulletSpeedMultiplier),
 			lifetime: PHYSICS.PLAYER_BULLET_LIFETIME_SECONDS,
 		};
 		State.playerBullets.push(bullet);
@@ -690,10 +841,80 @@ export function updateCamera(deltaSeconds: number) {
 	State.worldSpaceClip.center = State.cameraPosition;
 	State.worldSpaceClip.halfSize = State.canvasWidthHeight.scale(0.5 / State.cameraScale);
 }
+const SPRING_LENGTH = 150;
+const SPRING_STRENGTH = 0.8;
+const REPULSION = 8000;
+const DAMPING = 5;
+const MAX_FORCE = 500;
+const MAX_VELOCITY = 400;
+const FIXED_DT = 0.016;
+
+export function updateUpgradePhysics(_deltaSeconds: number) {
+    const nodes = Array.from(State.upgradeUINodes.entries());
+    if (nodes.length === 0) return;
+
+    const forces = new Map<number, Vec2>();
+    for (const [id] of nodes) {
+        forces.set(id, Vec2.ZERO);
+    }
+
+    // Spring attraction along edges (both directions)
+    for (const [id, node] of nodes) {
+        for (const childId of State.save.dependencyGraph.get(id) ?? []) {
+            const childNode = State.upgradeUINodes.get(childId);
+            if (!childNode) continue;
+
+            const delta = childNode.position.sub(node.position);
+            const dist = Math.max(delta.length(), 0.01);
+            const displacement = dist - SPRING_LENGTH;
+            const springForce = delta.normalize().scale(SPRING_STRENGTH * displacement);
+
+            forces.set(id, forces.get(id)!.add(springForce));
+            forces.set(childId, forces.get(childId)!.sub(springForce));
+        }
+    }
+
+    // Repulsion between every pair of nodes
+    for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+            const [idA, nodeA] = nodes[i];
+            const [idB, nodeB] = nodes[j];
+
+            const delta = nodeB.position.sub(nodeA.position);
+            const distSq = Math.max(delta.lengthSq(), 1);
+            const repelForce = delta.normalize().scale(REPULSION / distSq);
+
+            forces.set(idA, forces.get(idA)!.sub(repelForce));
+            forces.set(idB, forces.get(idB)!.add(repelForce));
+        }
+    }
+
+    // Clamp forces to avoid explosion from bad starting conditions
+    for (const [id] of nodes) {
+        const f = forces.get(id)!;
+        const mag = f.length();
+        if (mag > MAX_FORCE) forces.set(id, f.scale(MAX_FORCE / mag));
+    }
+
+    // Integrate using velocity stored on the node
+    for (const [id, node] of nodes) {
+        node.velocity = node.velocity.add(forces.get(id)!.scale(FIXED_DT));
+        node.velocity = node.velocity.scale(1 / (1 + DAMPING * FIXED_DT));
+
+        const speed = node.velocity.length();
+        if (speed > MAX_VELOCITY) {
+            node.velocity = node.velocity.scale(MAX_VELOCITY / speed);
+        }
+
+        node.position = node.position.add(node.velocity.scale(FIXED_DT));
+    }
+}
 
 export function updateAll(deltaSeconds: number) {
+	regenerateDependencyGraph(true);
 	updateCamera(deltaSeconds);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
+	updateUpgradePhysics(deltaSeconds);
 	if(State.save.latch % 100 === 0) {
 		autoSaveLoad();
 	}
