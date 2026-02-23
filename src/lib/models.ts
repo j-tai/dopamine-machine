@@ -30,6 +30,12 @@ export const PHYSICS = {
 	PLAYER_BULLET_SPEED: 400,
 	PLAYER_BULLET_LIFETIME_SECONDS: 1.0,
 	BASIC_ENEMY_RADIUS: 30,
+	// Each zone is a tall strip
+	HALF_WIDTH_PER_ZONE: 2000,
+	HALF_HEIGHT_FOR_PLAYER: 6000,
+	HALF_HEIGHT_FOR_ENEMIES: 8000,
+	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
+	MAX_ENEMIES_PER_ZONE: 100,
 };
 
 /**
@@ -39,7 +45,7 @@ export const ECONOMY = {
 	ON_KILL_CURRENCY_SCALE: 100,
 };
 
-/// A 2D vector.
+/// An immutable 2D vector.
 /// Note arithmetic operations are named by their short forms, similar to Python conventions
 export class Vec2 {
 	public static readonly ZERO = new Vec2(0, 0);
@@ -113,6 +119,21 @@ export class Vec2 {
     public static fromAngle(radians: number): Vec2 {
         return new Vec2(Math.cos(radians), Math.sin(radians));
     }
+
+	public rotate(radians: number): Vec2 {
+		const cos = Math.cos(radians);
+		const sin = Math.sin(radians);
+		return new Vec2(this.x * cos - this.y * sin, this.x * sin + this.y * cos);
+	}
+
+	public dot(other: Vec2): number {
+		return this.x * other.x + this.y * other.y;
+	}
+}
+
+export function randomUnitVector(): Vec2 {
+	const angle = Math.random() * 2 * Math.PI;
+	return new Vec2(Math.cos(angle), Math.sin(angle));
 }
 
 // Center and extents
@@ -192,6 +213,20 @@ export function polyOneHot(index: number, value: number): Polynomial {
 	return result;
 }
 
+/// Get the rectangle covering the specified zones.
+/// Start inclusive, stop exclusive. For example, getZoneRect(0, 1) returns the rectangle covering zone 0 only, while getZoneRect(0, 2) returns the rectangle covering zones 0 and 1.
+export function getZoneRect(startZone: number, stopZone: number, isPlayer: boolean): Rect {
+	// Zone 0 is centered at (0, 0), zone 1 is directly to the right, etc.
+	const halfWidth = PHYSICS.HALF_WIDTH_PER_ZONE * (stopZone - startZone);
+	const centerX = PHYSICS.HALF_WIDTH_PER_ZONE * (startZone + stopZone - 1) / 2;
+	const halfHeight = isPlayer ? PHYSICS.HALF_HEIGHT_FOR_PLAYER : PHYSICS.HALF_HEIGHT_FOR_ENEMIES;
+
+	return {
+		center: new Vec2(centerX, 0),
+		halfSize: new Vec2(halfWidth, halfHeight),
+	};
+}
+
 export type Bullet = {
 	position: Vec2,
 	velocity: Vec2,
@@ -255,16 +290,24 @@ export const State = {
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
     mousePosition: Vec2.ZERO, // World-space mouse position
-	arenaBounds: {
-		center: Vec2.ZERO,
-		halfSize: new Vec2(100, 100)
-	} as Rect,
+	/// Used to clamp player position
+	arenaBounds: getZoneRect(0, 1, true) as Rect,
 	playerBullets: [] as Bullet[],
 	playerShootingCharge: 0,
 	basicEnemies: [] as BasicEnemy[],
 	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
 	basicEnemySpeedByRank: [10, 20, 35, 60],
 };
+
+export function createBasicEnemy(rank: number): BasicEnemy {
+	return {
+		rank,
+		position: Vec2.ZERO,
+		facingDirection: new Vec2(1, 0),
+		maxHealth: State.basicEnemyInitialHealthByRank[rank],
+		currentHealth: State.basicEnemyInitialHealthByRank[rank],
+	};
+}
 
 /// Data that is persisted to the save file.
 export type SaveData = typeof State.save;
@@ -324,9 +367,25 @@ export function updatePhysics(deltaSeconds: number) {
 		.filter(bullet => bullet.lifetime > 0);
 	// Tick all enemies
 	for(const enemy of State.basicEnemies) {
-		// apply velocity
+		// apply velocity, reflecting off their arena bounds
+		const enemyBounds = rectToBounds(getZoneRect(enemy.rank, enemy.rank + 1, false));
 		const enemyVelocity = enemy.facingDirection.scale(State.basicEnemySpeedByRank[enemy.rank]);
-		enemy.position = enemy.position.add(enemyVelocity.scale(deltaSeconds));
+		let newPosition = enemy.position.add(enemyVelocity.scale(deltaSeconds));
+		// calculate accurate reflection if we would go out of bounds
+		if(newPosition.x < enemyBounds.min.x) {
+			newPosition = new Vec2(enemyBounds.min.x + (enemyBounds.min.x - newPosition.x), newPosition.y);
+			enemy.facingDirection = new Vec2(-enemy.facingDirection.x, enemy.facingDirection.y);
+		} else if(newPosition.x > enemyBounds.max.x) {
+			newPosition = new Vec2(enemyBounds.max.x + (enemyBounds.max.x - newPosition.x), newPosition.y);
+			enemy.facingDirection = new Vec2(-enemy.facingDirection.x, enemy.facingDirection.y);
+		}
+		if(newPosition.y < enemyBounds.min.y) {
+			newPosition = new Vec2(newPosition.x, enemyBounds.min.y + (enemyBounds.min.y - newPosition.y));
+			enemy.facingDirection = new Vec2(enemy.facingDirection.x, -enemy.facingDirection.y);
+		} else if(newPosition.y > enemyBounds.max.y) {
+			newPosition = new Vec2(newPosition.x, enemyBounds.max.y + (enemyBounds.max.y - newPosition.y));
+			enemy.facingDirection = new Vec2(enemy.facingDirection.x, -enemy.facingDirection.y);
+		}
 	}
 	// Remove dead enemies and trigger on kill effects
 	State.basicEnemies = State.basicEnemies.filter(enemy => {
@@ -336,6 +395,25 @@ export function updatePhysics(deltaSeconds: number) {
 		}
 		return true;
 	});
+	// If any zones are not at their max population, attempt to spawn new enemies
+	for(let zone = 0; zone < State.basicEnemyInitialHealthByRank.length; zone++) {
+		let zoneEnemyCount = State.basicEnemies.filter(enemy => enemy.rank === zone).length;
+		const zoneBounds = rectToBounds(getZoneRect(zone, zone + 1, false));
+		while(zoneEnemyCount < PHYSICS.MAX_ENEMIES_PER_ZONE) {
+			// Choose a random location within the zone that is outside the player's safe radius
+			const randomPoint = new Vec2(
+				Math.random() * (zoneBounds.max.x - zoneBounds.min.x) + zoneBounds.min.x,
+				Math.random() * (zoneBounds.max.y - zoneBounds.min.y) + zoneBounds.min.y
+			);
+			if(randomPoint.sub(State.playerPosition).length() > PHYSICS.PLAYER_SAFE_NO_SPAWN_RADIUS) {
+				const newEnemy = createBasicEnemy(zone);
+				newEnemy.position = randomPoint;
+				newEnemy.facingDirection = randomUnitVector();
+				State.basicEnemies.push(newEnemy);
+				zoneEnemyCount++;
+			}
+		}
+	}
 }
 
 export function updateAll(deltaSeconds: number) {

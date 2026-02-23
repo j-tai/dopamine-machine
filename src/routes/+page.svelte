@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {State, COLORS, Vec2, updateAll} from "$lib/models";
+    import {State, COLORS, Vec2, updateAll, PHYSICS} from "$lib/models";
     import {onMount} from "svelte";
 
     let canvas: HTMLCanvasElement;
@@ -26,6 +26,7 @@
         ctx.scale(cameraScale, -cameraScale);
 
         drawBullets(ctx);
+        drawEnemies(ctx);
         drawPlayer(ctx);
         drawCrosshair(ctx);
     }
@@ -70,6 +71,41 @@
             ctx.stroke();
         }
         ctx.restore();
+    }
+
+    function drawEnemies(ctx: CanvasRenderingContext2D) {
+        for(const enemy of State.basicEnemies) {
+            ctx.save();
+            ctx.translate(enemy.position.x, enemy.position.y);
+            ctx.lineWidth = 4 / cameraScale;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[enemy.rank];
+            const polygonN = 3 + enemy.rank;
+            const polygonAngle = Math.PI * 2 / polygonN;
+            const vertexRadius = PHYSICS.BASIC_ENEMY_RADIUS / Math.cos(Math.PI / polygonN);
+            const innerVertexRadius = vertexRadius * Math.max(0, enemy.currentHealth) / enemy.maxHealth;
+
+            let pointer = enemy.facingDirection.scale(vertexRadius);
+            ctx.beginPath();
+            ctx.moveTo(pointer.x, pointer.y);
+            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+                pointer = pointer.rotate(polygonAngle);
+                ctx.lineTo(pointer.x, pointer.y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            pointer = enemy.facingDirection.scale(innerVertexRadius);
+            ctx.beginPath();
+            ctx.moveTo(pointer.x, pointer.y);
+            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+                pointer = pointer.rotate(polygonAngle);
+                ctx.lineTo(pointer.x, pointer.y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
     }
 
     function drawPlayer(ctx: CanvasRenderingContext2D) {
