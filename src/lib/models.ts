@@ -271,6 +271,7 @@ export type SaveData = typeof State.save;
 
 export function onEnemyKilled(enemy: BasicEnemy) {
 	// Grant currency based on enemy rank
+	State.save.basicRankCurrency = polyAdd(State.save.basicRankCurrency, polyOneHot(enemy.rank, ECONOMY.ON_KILL_CURRENCY_SCALE));
 }
 
 export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
@@ -322,7 +323,19 @@ export function updatePhysics(deltaSeconds: number) {
 		.map(bullet => updateBullet(deltaSeconds, bullet))
 		.filter(bullet => bullet.lifetime > 0);
 	// Tick all enemies
+	for(const enemy of State.basicEnemies) {
+		// apply velocity
+		const enemyVelocity = enemy.facingDirection.scale(State.basicEnemySpeedByRank[enemy.rank]);
+		enemy.position = enemy.position.add(enemyVelocity.scale(deltaSeconds));
+	}
 	// Remove dead enemies and trigger on kill effects
+	State.basicEnemies = State.basicEnemies.filter(enemy => {
+		if(enemy.currentHealth <= 0) {
+			onEnemyKilled(enemy);
+			return false;
+		}
+		return true;
+	});
 }
 
 export function updateAll(deltaSeconds: number) {
