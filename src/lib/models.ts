@@ -1,6 +1,6 @@
 import { gzip, ungzip } from 'pako';
 
-export type Edge = [number, number];
+export type AdjacencyMap = Map<number, number[]>;
 /// Immutable type representing a polynomial, where the value at index i is the coefficient for x^i. For example, [3, 0, 2] represents 3 + 0*x + 2*x^2 (which simplifies to 3 + 2x^2).
 /// Invariants:
 /// 1. The last coefficient must be non-zero, except for the zero polynomial which is represented by an empty array.
@@ -350,6 +350,12 @@ export function dragVectorTowards(current: Vec2, target: Vec2, dragFactor: numbe
 	return current.add(toTarget.normalize().scale(dragAmount));
 }
 
+export const CLEAN_UPGRADE_CACHE = {
+	mainWeaponParallelShots: 1,
+};
+
+export type UpgradeCacheType = typeof CLEAN_UPGRADE_CACHE;
+
 /// The singleton game state.
 export const State = {
 	/// The data that is persisted to the save file.
@@ -358,9 +364,11 @@ export const State = {
 		latch: 0,
 		/// how much of each currency you own
 		basicRankCurrency: [] as Polynomial,
-		dependencyGraph: [] as Edge[],
+		/// backwards edges (aka all prerequisites) for each upgrade, used to determine which upgrades are available to purchase
+		dependencyGraph: new Map<number, number[]>(),
 		obtainedUpgrades: [] as boolean[],
 	},
+	upgradeCache: structuredClone(CLEAN_UPGRADE_CACHE) as UpgradeCacheType,
 
 	canvasWidthHeight: new Vec2(800, 600),
 	/// The area of the world currently visible on screen, used for culling. Centered on the camera position.
@@ -379,7 +387,7 @@ export const State = {
 	playerBullets: [] as Bullet[],
 	playerShootingCharge: 0,
 	basicEnemies: [] as BasicEnemy[],
-	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
+	basicEnemyInitialHealthByRank: [3, 10, 50, 500],
 	basicEnemySpeedByRank: [10, 20, 35, 60],
 	upgradeDefinitions: new Map<number, {
 		/// Unique identifier for the upgrade, should fit in a 31-bit integer
@@ -395,6 +403,8 @@ export const State = {
 		/// It should be safe to run this function multiple times, and out of order.
 		applyUpgrade: () => void,
 	}>(),
+	/// forward edges, minimal graph. used to generate dependencyGraph
+	baseDependencyGraph: new Map<number, number[]>(),
 };
 type SaveDataType = typeof State.save;
 
@@ -437,6 +447,125 @@ export function autoSaveLoad(): void {
     } else {
         localStorage.setItem('saveData', currentSaveBytesBase64);
     }
+}
+
+export function addBaseDependency(prereqId: number, upgradeId: number): void {
+	if (!State.baseDependencyGraph.has(prereqId)) {
+		State.baseDependencyGraph.set(prereqId, []);
+	}
+	// check if it already exists
+	if (State.baseDependencyGraph.get(prereqId)!.includes(upgradeId)) {
+		return;
+	}
+	State.baseDependencyGraph.get(prereqId)!.push(upgradeId);
+}
+
+export function makeUpgradeParallelShots(nshots: number, title: string, cost: Polynomial): void {
+	const id = nshots;
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Main weapon now shoots ${nshots} bullets in parallel.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.mainWeaponParallelShots = Math.max(State.upgradeCache.mainWeaponParallelShots, nshots);
+		},
+	});
+	if(nshots > 2) {
+		addBaseDependency(nshots - 1, nshots);
+	}
+}
+
+export function regenerateUpgradeDefinitions(): void {
+	// Fix up upgradeDefinitions and baseDependencyGraph. Safe to run multiple times
+	makeUpgradeParallelShots(2, "Double Shot", polyOneHot(0, 500));
+	makeUpgradeParallelShots(3, "Triple Shot", polyOneHot(1, 5000));
+	makeUpgradeParallelShots(4, "Quadruple Shot", polyOneHot(2, 50000));
+	makeUpgradeParallelShots(5, "Quintuple Shot", polyOneHot(3, 500000));
+}
+
+export function regenerateDependencyGraph(): void {
+    // 1. Get a list of all upgrade IDs
+    const allUpgradeIds = Array.from(State.upgradeDefinitions.keys());
+    // 2. Shuffle the list of all upgrade IDs
+    allUpgradeIds.sort(() => Math.random() - 0.5);
+
+    // 3. Randomized Kahn's toposort
+    const inDegree = new Map<number, number>();
+    for (const id of allUpgradeIds) inDegree.set(id, 0);
+    for (const [, deps] of State.baseDependencyGraph)
+        for (const dep of deps)
+            inDegree.set(dep, (inDegree.get(dep) ?? 0) + 1);
+
+    const topoOrder: number[] = [];
+    const frontier = allUpgradeIds.filter(id => inDegree.get(id) === 0);
+    while (frontier.length > 0) {
+        const idx = Math.floor(Math.random() * frontier.length);
+        const [node] = frontier.splice(idx, 1);
+        topoOrder.push(node);
+        for (const neighbor of State.baseDependencyGraph.get(node) ?? []) {
+            const deg = inDegree.get(neighbor)! - 1;
+            inDegree.set(neighbor, deg);
+            if (deg === 0) frontier.push(neighbor);
+        }
+    }
+
+    // 4. Build amended graph: base edges + random new edges
+    const MAX_NEW_EDGES = 2;
+    const graph = new Map<number, Set<number>>();
+    for (const id of topoOrder) graph.set(id, new Set());
+
+    for (const [prereq, dependents] of State.baseDependencyGraph)
+        for (const dep of dependents)
+            graph.get(prereq)!.add(dep);
+
+    const candidates: [number, number][] = [];
+    for (let i = 0; i < topoOrder.length; i++)
+        for (let j = i + 1; j < topoOrder.length; j++)
+            if (!graph.get(topoOrder[i])!.has(topoOrder[j]))
+                candidates.push([topoOrder[i], topoOrder[j]]);
+    candidates.sort(() => Math.random() - 0.5);
+    for (const [u, v] of candidates.slice(0, MAX_NEW_EDGES))
+        graph.get(u)!.add(v);
+
+    // 5. Transitive reduction
+    // For each edge u->v, check if v is reachable from u via another path.
+    // Process in reverse topo order so intermediate edges are still present when checked.
+    function canReachWithout(u: number, v: number): boolean {
+        const seen = new Set<number>();
+        const queue: number[] = [];
+        for (const neighbor of graph.get(u)!) {
+            if (neighbor !== v && !seen.has(neighbor)) {
+                seen.add(neighbor);
+                queue.push(neighbor);
+            }
+        }
+        while (queue.length > 0) {
+            const cur = queue.shift()!;
+            if (cur === v) return true;
+            for (const neighbor of graph.get(cur) ?? []) {
+                if (!seen.has(neighbor)) {
+                    seen.add(neighbor);
+                    queue.push(neighbor);
+                }
+            }
+        }
+        return false;
+    }
+
+    for (const u of [...topoOrder].reverse())
+        for (const v of [...graph.get(u)!])
+            if (canReachWithout(u, v))
+                graph.get(u)!.delete(v);
+
+    // 6. Invert to get dependent -> prereqs map
+    const dependencyGraph = new Map<number, number[]>();
+    for (const id of topoOrder) dependencyGraph.set(id, []);
+    for (const [prereq, dependents] of graph)
+        for (const dep of dependents)
+            dependencyGraph.get(dep)!.push(prereq);
+
+    State.save.dependencyGraph = dependencyGraph;
 }
 
 export function createBasicEnemy(rank: number): BasicEnemy {

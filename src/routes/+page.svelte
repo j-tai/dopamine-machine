@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {State, COLORS, Vec2, updateAll, PHYSICS, rectToBounds} from "$lib/models";
+    import {State, COLORS, Vec2, updateAll, PHYSICS, rectToBounds, regenerateDependencyGraph} from "$lib/models";
     import {onMount} from "svelte";
 
     let bottomCanvas: HTMLCanvasElement;
@@ -233,6 +233,9 @@
         }
         if (event.key === 'e' || event.key === 'E') {
             splitPercent = Math.min(90, splitPercent + 10);
+        }
+        if (event.key === '9') {
+            regenerateDependencyGraph();
         }
     }
 
