@@ -21,7 +21,15 @@ export const PHYSICS = {
 	PLAYER_SECONDS_PER_SHOT: 0.5,
 	PLAYER_BULLET_SPEED: 400,
 	PLAYER_BULLET_LIFETIME_SECONDS: 1.0,
-}
+	BASIC_ENEMY_RADIUS: 30,
+};
+
+/**
+ * Global Economy Constants
+ */
+export const ECONOMY = {
+	ON_KILL_CURRENCY_SCALE: 100,
+};
 
 /// A 2D vector.
 export class Vec2 {
@@ -209,6 +217,22 @@ export const State = {
 export type SaveData = typeof State.save;
 
 export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
+	for(const enemy of State.basicEnemies) {
+		// skip already dead enemies
+		if(enemy.currentHealth <= 0) continue;
+		// perform line-segment to circle intersection test to see if we hit an enemy
+		const toEnemy = enemy.position.sub(bullet.position);
+		const alongBullet = bullet.velocity.normalize().scale(toEnemy.dot(bullet.velocity.normalize()));
+		const closestPoint = bullet.position.add(alongBullet);
+		const distToEnemy = enemy.position.sub(closestPoint).length();
+		if(distToEnemy <= PHYSICS.BASIC_ENEMY_RADIUS) {
+			// hit! apply damage and end the bullet's life
+			enemy.currentHealth -= 1;
+			bullet.lifetime = 0;
+			break; // stop checking other enemies since the bullet is now dead
+		}
+	}
+	// update fields
 	bullet.position = bullet.position.add(bullet.velocity.scale(deltaSeconds));
 	bullet.lifetime -= deltaSeconds;
 	return bullet;
