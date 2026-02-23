@@ -381,6 +381,20 @@ export const State = {
 	basicEnemies: [] as BasicEnemy[],
 	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
 	basicEnemySpeedByRank: [10, 20, 35, 60],
+	upgradeDefinitions: new Map<number, {
+		/// Unique identifier for the upgrade, should fit in a 31-bit integer
+		id: number,
+		/// The name of the upgrade
+		name: string,
+		/// The description of the upgrade
+		description: string,
+		/// The cost of the upgrade
+		cost: Polynomial,
+		/// Function to be run when the upgrade is obtained.
+		/// Should apply the upgrade's effects to the game state.
+		/// It should be safe to run this function multiple times, and out of order.
+		applyUpgrade: () => void,
+	}>(),
 };
 type SaveDataType = typeof State.save;
 
