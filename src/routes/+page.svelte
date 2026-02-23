@@ -58,10 +58,15 @@
     }
 
     function drawUpgrades(ctx: CanvasRenderingContext2D) {
+        ctx.save();
 	    const nodes = Array.from(State.upgradeUINodes.entries());
         ctx.strokeStyle = COLORS.UPGRADE_COLOR;
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
+
+        // center the upgrade graph
+        ctx.translate(topCanvas.width * 0.5, topCanvas.height * 0.5);
+        ctx.translate(-State.upgradeUICenter.x, -State.upgradeUICenter.y);
 
         for(const [id, node] of nodes) {
             for(const childId of State.save.dependencyGraph.get(id) ?? []) {
@@ -80,10 +85,12 @@
                 allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
             }
             ctx.beginPath();
-            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 25 : 15), 0, 2 * Math.PI);
+            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 20 : 10), 0, 2 * Math.PI);
             ctx.fillStyle = COLORS.UPGRADE_COLOR;
             ctx.fill();
         }
+
+        ctx.restore();
     }
 
     function drawWallet(ctx: CanvasRenderingContext2D) {

@@ -11,7 +11,7 @@ export type Polynomial = number[];
 export const POLY_ZERO: Polynomial = [];
 export const POLY_ONE: Polynomial = [1];
 
-export const UPGRADES_MAX_ADDED_EDGES = 2;
+export const UPGRADES_MAX_ADDED_EDGES = 8;
 
 /**
  * Global Visual Constants
@@ -424,6 +424,7 @@ export const State = {
 	baseDependencyGraph: new Map<number, number[]>(),
 	/// used in the UI for automatic force directed layout of upgrades. maps IDs to nodes that can wiggle around
 	upgradeUINodes: new Map<number, { position: Vec2, velocity: Vec2 }>(),
+	upgradeUICenter: Vec2.ZERO, // average position of all upgrade nodes, used to center UI
 };
 type SaveDataType = typeof State.save;
 
@@ -516,6 +517,9 @@ export function toRomanNumeral(num: number): string {
   return result;
 }
 
+/// Double shot is the source node for most upgrades
+export const UPGRADE_ID_DOUBLE_SHOT = 2;
+
 export function makeUpgradeParallelShots(nshots: number, title: string, cost: Polynomial): void {
 	const id = nshots;
 	State.upgradeDefinitions.set(id, {
@@ -548,6 +552,8 @@ export function makeUpgradeBulletSpeedMultiplier(index: number): void {
 	});
 	if(index > 0) {
 		addBaseDependency(id - 1, id);
+	} else {
+		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
 }
 
@@ -567,6 +573,8 @@ export function makeUpgradeFlySpeedMultiplier(index: number): void {
 	});
 	if(index > 0) {
 		addBaseDependency(id - 1, id);
+	} else {
+		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
 }
 
@@ -586,6 +594,8 @@ export function makeUpgradeTurningSpeedMultiplier(index: number): void {
 	});
 	if(index > 0) {
 		addBaseDependency(id - 1, id);
+	} else {
+		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
 }
 
@@ -605,6 +615,8 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 	});
 	if(index > 0) {
 		addBaseDependency(id - 1, id);
+	} else {
+		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
 }
 
@@ -841,13 +853,14 @@ export function updateCamera(deltaSeconds: number) {
 	State.worldSpaceClip.center = State.cameraPosition;
 	State.worldSpaceClip.halfSize = State.canvasWidthHeight.scale(0.5 / State.cameraScale);
 }
-const SPRING_LENGTH = 150;
+
+const SPRING_LENGTH = 100;
 const SPRING_STRENGTH = 0.8;
 const REPULSION = 8000;
 const DAMPING = 5;
 const MAX_FORCE = 500;
 const MAX_VELOCITY = 400;
-const FIXED_DT = 0.016;
+const FIXED_DT = 1;
 
 export function updateUpgradePhysics(_deltaSeconds: number) {
     const nodes = Array.from(State.upgradeUINodes.entries());
@@ -908,9 +921,13 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 
         node.position = node.position.add(node.velocity.scale(FIXED_DT));
     }
+
+	// Cache average position
+	State.upgradeUICenter = nodes.reduce((sum, [, node]) => sum.add(node.position), Vec2.ZERO).scale(1 / nodes.length);
 }
 
 export function updateAll(deltaSeconds: number) {
+	State.cameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
 	regenerateDependencyGraph(true);
 	updateCamera(deltaSeconds);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
