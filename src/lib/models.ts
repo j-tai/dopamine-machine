@@ -450,9 +450,6 @@ export function createBasicEnemy(rank: number): BasicEnemy {
 	};
 }
 
-/// Data that is persisted to the save file.
-export type SaveData = typeof State.save;
-
 export function onEnemyKilled(enemy: BasicEnemy) {
 	// Grant currency based on enemy rank
 	State.save.basicRankCurrency = polyAdd(State.save.basicRankCurrency, polyOneHot(enemy.rank, ECONOMY.ON_KILL_CURRENCY_SCALE));
