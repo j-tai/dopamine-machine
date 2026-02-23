@@ -1,3 +1,5 @@
+import { gzip, ungzip } from 'pako';
+
 export type Edge = [number, number];
 /// Immutable type representing a polynomial, where the value at index i is the coefficient for x^i. For example, [3, 0, 2] represents 3 + 0*x + 2*x^2 (which simplifies to 3 + 2x^2).
 /// Invariants:
@@ -351,6 +353,8 @@ export function dragVectorTowards(current: Vec2, target: Vec2, dragFactor: numbe
 export const State = {
 	/// The data that is persisted to the save file.
 	save: {
+		/// counter used as a heuristic to prevent overwriting a newer save
+		latch: 0,
 		/// how much of each currency you own
 		basicRankCurrency: [] as Polynomial,
 		dependencyGraph: [] as Edge[],
@@ -377,6 +381,48 @@ export const State = {
 	basicEnemyInitialHealthByRank: [2, 5, 20, 100],
 	basicEnemySpeedByRank: [10, 20, 35, 60],
 };
+type SaveDataType = typeof State.save;
+
+export function marshalSaveToBytes(saveData: SaveDataType): Uint8Array {
+    const jsonString = JSON.stringify(saveData);
+    return gzip(new TextEncoder().encode(jsonString));
+}
+
+export function unmarshalSaveFromBytes(bytes: Uint8Array): SaveDataType {
+    const jsonString = ungzip(bytes, { to: 'string' });
+    return JSON.parse(jsonString);
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+}
+
+export function autoSaveLoad(): void {
+    const currentSave = State.save;
+    const currentSaveBytes = marshalSaveToBytes(currentSave);
+    const currentSaveBytesBase64 = uint8ToBase64(currentSaveBytes);
+    const storedSaveBytesBase64 = localStorage.getItem('saveData');
+
+    if (!storedSaveBytesBase64) {
+        localStorage.setItem('saveData', currentSaveBytesBase64);
+        return;
+    }
+
+    const loadedSaveBytes = new Uint8Array(
+        atob(storedSaveBytesBase64).split("").map(c => c.charCodeAt(0))
+    );
+    const loadedSave = unmarshalSaveFromBytes(loadedSaveBytes);
+
+    if (loadedSave.latch > currentSave.latch) {
+        State.save = loadedSave;
+    } else {
+        localStorage.setItem('saveData', currentSaveBytesBase64);
+    }
+}
 
 export function createBasicEnemy(rank: number): BasicEnemy {
 	return {
@@ -507,4 +553,8 @@ export function updateCamera(deltaSeconds: number) {
 export function updateAll(deltaSeconds: number) {
 	updateCamera(deltaSeconds);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
+	if(State.save.latch % 100 === 0) {
+		autoSaveLoad();
+	}
+	State.save.latch += 1;
 }
