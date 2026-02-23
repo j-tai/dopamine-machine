@@ -2,26 +2,33 @@
     import {State, COLORS, Vec2, updateAll, PHYSICS, rectToBounds} from "$lib/models";
     import {onMount} from "svelte";
 
-    let canvas: HTMLCanvasElement;
+    let bottomCanvas: HTMLCanvasElement;
+    let topCanvas: HTMLCanvasElement;
 
     let lastTime = 0;
+    let splitPercent = 10;
+
+    function resizeCanvas(canvas: HTMLCanvasElement) {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
 
     function render() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        State.canvasWidthHeight = new Vec2(canvas.width, canvas.height);
+        resizeCanvas(bottomCanvas);
+        State.canvasWidthHeight = new Vec2(bottomCanvas.width, bottomCanvas.height);
 
-        const ctx = canvas.getContext('2d');
+        const ctx = bottomCanvas.getContext('2d');
         if (!ctx) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, bottomCanvas.width, bottomCanvas.height);
 
         // Background
         ctx.fillStyle = COLORS.BACKGROUND;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, bottomCanvas.width, bottomCanvas.height);
 
         // Set up camera (Center of screen, +Y up)
         ctx.resetTransform();
-        ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
+        ctx.translate(bottomCanvas.width * 0.5, bottomCanvas.height * 0.5);
         ctx.scale(State.cameraScale, -State.cameraScale);
         ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
@@ -40,7 +47,7 @@
             const vertexRadius = 18;
             const numSides = rank + 3; // rank 0 = triangle, rank 1 = square, etc.
             const x = 40;
-            const y = canvas.height - 40 - rank * 50;
+            const y = bottomCanvas.height - 40 - rank * 50;
             const spinRate = 3 / numSides;
 
             ctx.save();
@@ -207,16 +214,26 @@
     }
 
     function onKey(event: KeyboardEvent) {
-
+        if (event.key === 'q' || event.key === 'Q') {
+            splitPercent = Math.max(10, splitPercent - 10);
+            resizeCanvas(topCanvas);
+            resizeCanvas(bottomCanvas);
+        }
+        if (event.key === 'e' || event.key === 'E') {
+            splitPercent = Math.min(90, splitPercent + 10);
+            resizeCanvas(topCanvas);
+            resizeCanvas(bottomCanvas);
+        }
     }
 
     function handleMouseMove(event: MouseEvent) {
-        // Convert screen space to world space
-        // 1. Center origin
-        let worldX = event.clientX - window.innerWidth / 2;
-        let worldY = event.clientY - window.innerHeight / 2;
-        
-        // 2. Adjust for camera scale and inverted Y axis
+        const rect = bottomCanvas.getBoundingClientRect();
+
+        // Position relative to the center of bottomCanvas
+        let worldX = event.clientX - (rect.left + rect.width / 2);
+        let worldY = event.clientY - (rect.top + rect.height / 2);
+
+        // Adjust for camera scale and inverted Y axis
         worldX /= State.cameraScale;
         worldY /= -State.cameraScale;
 
@@ -243,15 +260,24 @@
 
 <svelte:window on:keydown={onKey} on:mousemove={handleMouseMove} />
 
-<canvas bind:this={canvas}></canvas>
+<div class="container">
+    <canvas bind:this={topCanvas} style="height: {splitPercent}%"></canvas>
+    <canvas bind:this={bottomCanvas} style="height: {100 - splitPercent}%"></canvas>
+</div>
 
 <style>
-    canvas {
+    .container {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    canvas {
+        width: 100%;
         display: block;
     }
 </style>
