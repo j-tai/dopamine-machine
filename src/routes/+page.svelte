@@ -15,6 +15,7 @@
     }
 
     function render() {
+        resizeCanvas(topCanvas);
         resizeCanvas(bottomCanvas);
         State.canvasWidthHeight = new Vec2(bottomCanvas.width, bottomCanvas.height);
 
@@ -216,13 +217,9 @@
     function onKey(event: KeyboardEvent) {
         if (event.key === 'q' || event.key === 'Q') {
             splitPercent = Math.max(10, splitPercent - 10);
-            resizeCanvas(topCanvas);
-            resizeCanvas(bottomCanvas);
         }
         if (event.key === 'e' || event.key === 'E') {
             splitPercent = Math.min(90, splitPercent + 10);
-            resizeCanvas(topCanvas);
-            resizeCanvas(bottomCanvas);
         }
     }
 
