@@ -146,11 +146,7 @@
         worldX /= cameraScale;
         worldY /= -cameraScale;
 
-        // 3. Adjust for camera location
-        worldX += State.cameraPosition.x;
-        worldY += State.cameraPosition.y;
-
-        State.mousePosition = new Vec2(worldX, worldY);
+        State.screenMousePosition = new Vec2(worldX, worldY);
     }
 
     function runAnimationFrame(currentTime: number) {

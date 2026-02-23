@@ -298,6 +298,7 @@ export function dragVectorTowards(current: Vec2, target: Vec2, dragFactor: numbe
 	if(toTargetLength > hardThreshold) {
 		return target.add(toTarget.normalize().scale(-hardThreshold)); // beyond hard threshold, clamp to hard threshold
 	}
+	dragFactor = Math.max(0, Math.min(1, dragFactor)); // clamp drag factor to [0, 1]
 	const dragAmount = toTargetLength * dragFactor * (toTargetLength - softThreshold) / (hardThreshold - softThreshold); // scale drag amount based on distance within thresholds
 	return current.add(toTarget.normalize().scale(dragAmount));
 }
@@ -315,6 +316,7 @@ export const State = {
 	cameraPosition: Vec2.ZERO,
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
+	screenMousePosition: Vec2.ZERO, // Mouse position in world scale but not shifted by camera
     mousePosition: Vec2.ZERO, // World-space mouse position
 	/// Used to clamp player position
 	arenaBounds: getZoneRect(0, 1, true) as Rect,
@@ -443,6 +445,7 @@ export function updatePhysics(deltaSeconds: number) {
 }
 
 export function updateAll(deltaSeconds: number) {
+	State.mousePosition = State.screenMousePosition.add(State.cameraPosition);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
-	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
+	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE * deltaSeconds, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
 }
