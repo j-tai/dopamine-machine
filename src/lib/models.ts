@@ -221,7 +221,7 @@ export function polyOneHot(index: number, value: number): Polynomial {
 export function getZoneRect(startZone: number, stopZone: number, isPlayer: boolean): Rect {
 	// Zone 0 is centered at (0, 0), zone 1 is directly to the right, etc.
 	const halfWidth = PHYSICS.HALF_WIDTH_PER_ZONE * (stopZone - startZone);
-	const centerX = PHYSICS.HALF_WIDTH_PER_ZONE * (startZone + stopZone - 1) / 2;
+	const centerX = PHYSICS.HALF_WIDTH_PER_ZONE * (startZone + stopZone - 1);
 	const halfHeight = isPlayer ? PHYSICS.HALF_HEIGHT_FOR_PLAYER : PHYSICS.HALF_HEIGHT_FOR_ENEMIES;
 
 	return {
@@ -313,6 +313,13 @@ export const State = {
 		obtainedUpgrades: [] as boolean[],
 	},
 
+	canvasWidthHeight: new Vec2(800, 600),
+	/// The area of the world currently visible on screen, used for culling. Centered on the camera position.
+	worldSpaceClip: {
+		center: Vec2.ZERO,
+		halfSize: new Vec2(400, 300),
+	},
+	cameraScale: 2, // 1 world unit = this many screen pixels
 	cameraPosition: Vec2.ZERO,
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
@@ -444,8 +451,14 @@ export function updatePhysics(deltaSeconds: number) {
 	}
 }
 
-export function updateAll(deltaSeconds: number) {
+export function updateCamera(deltaSeconds: number) {
 	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE * deltaSeconds, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
 	State.mousePosition = State.screenMousePosition.add(State.cameraPosition);
+	State.worldSpaceClip.center = State.cameraPosition;
+	State.worldSpaceClip.halfSize = State.canvasWidthHeight.scale(0.5 / State.cameraScale);
+}
+
+export function updateAll(deltaSeconds: number) {
+	updateCamera(deltaSeconds);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
 }

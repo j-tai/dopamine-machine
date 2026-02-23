@@ -4,13 +4,12 @@
 
     let canvas: HTMLCanvasElement;
 
-    const cameraScale = 2;
-
     let lastTime = 0;
 
     function render() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        State.canvasWidthHeight = new Vec2(canvas.width, canvas.height);
 
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
@@ -23,7 +22,7 @@
         // Set up camera (Center of screen, +Y up)
         ctx.resetTransform();
         ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
-        ctx.scale(cameraScale, -cameraScale);
+        ctx.scale(State.cameraScale, -State.cameraScale);
         ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
         drawBullets(ctx);
