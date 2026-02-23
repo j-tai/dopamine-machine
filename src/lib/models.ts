@@ -35,7 +35,7 @@ export const PHYSICS = {
 	HALF_HEIGHT_FOR_PLAYER: 6000,
 	HALF_HEIGHT_FOR_ENEMIES: 8000,
 	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
-	MAX_ENEMIES_PER_ZONE: 100,
+	MAX_ENEMIES_PER_ZONE: 1000,
 	CAMERA_DRAG_RATE: 2,
 	CAMERA_SOFT_THRESHOLD: 100,
 	CAMERA_HARD_THRESHOLD: 300,
@@ -445,7 +445,7 @@ export function updatePhysics(deltaSeconds: number) {
 }
 
 export function updateAll(deltaSeconds: number) {
+	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE * deltaSeconds, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
 	State.mousePosition = State.screenMousePosition.add(State.cameraPosition);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
-	State.cameraPosition = dragVectorTowards(State.cameraPosition, State.playerPosition, PHYSICS.CAMERA_DRAG_RATE * deltaSeconds, PHYSICS.CAMERA_SOFT_THRESHOLD, PHYSICS.CAMERA_HARD_THRESHOLD);
 }
