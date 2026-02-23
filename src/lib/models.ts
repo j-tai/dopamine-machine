@@ -14,6 +14,7 @@ export const POLY_ONE: Polynomial = [1];
  */
 export const COLORS = {
     BACKGROUND: '#340d0dff',
+	GRID: '#602424ff',
     PLAYER: '#d81b1bff',
     CROSSHAIR: '#d81b1bff',
 	PLAYER_BULLET: '#d81b1bff',
@@ -164,6 +165,17 @@ export function boundsToRect(bounds: RectBounds): Rect {
 	};
 }
 
+export function inflateRect(rect: Rect, extents: Vec2 | number): Rect {
+	return {
+		center: rect.center,
+		halfSize: rect.halfSize.add(typeof extents === "number" ? new Vec2(extents, extents) : extents),
+	};
+}
+
+export function boundsContainsPoint(bounds: RectBounds, point: Vec2): boolean {
+	return point.x >= bounds.min.x && point.x <= bounds.max.x && point.y >= bounds.min.y && point.y <= bounds.max.y;
+}
+
 export function clampPointToRect(point: Vec2, rect: Rect): Vec2 {
 	const bounds = rectToBounds(rect);
 	return new Vec2(
@@ -230,6 +242,36 @@ export function getZoneRect(startZone: number, stopZone: number, isPlayer: boole
 	};
 }
 
+/**
+ * Tests whether a line segment (not an infinite line!) intersects with a circle.
+ * 
+ * @param lineStart The start point of the line segment.
+ * @param lineEnd The end point of the line segment.
+ * @param circleCenter The center point of the circle.
+ * @param circleRadius The radius of the circle.
+ * @returns True if the line segment intersects with the circle, false otherwise.
+ */
+export function testLineSegmentCircleIntersection(lineStart: Vec2, lineEnd: Vec2, circleCenter: Vec2, circleRadius: number): boolean {
+	const lineDir = lineEnd.sub(lineStart);
+	const toCircle = circleCenter.sub(lineStart);
+	const lineLength = lineDir.length();
+	if (lineLength === 0) {
+		// Line segment is a point, check if it's inside the circle
+		return toCircle.length() <= circleRadius;
+	}
+	const lineUnit = lineDir.scale(1 / lineLength);
+	const projectionLength = toCircle.dot(lineUnit);
+	if (projectionLength < 0) {
+		// Closest point is lineStart
+		return toCircle.length() <= circleRadius;
+	} else if (projectionLength > lineLength) {
+		// Closest point is lineEnd
+		return circleCenter.sub(lineEnd).length() <= circleRadius;
+	}
+	const closestPoint = lineStart.add(lineUnit.scale(projectionLength));
+	return circleCenter.sub(closestPoint).length() <= circleRadius;
+}
+
 export type Bullet = {
 	position: Vec2,
 	velocity: Vec2,
@@ -245,6 +287,8 @@ export type BasicEnemy = {
 	facingDirection: Vec2,
 	maxHealth: number,
 	currentHealth: number,
+	/// Cache visibility calculations
+	isVisible?: boolean,
 }
 
 /**
@@ -341,6 +385,7 @@ export function createBasicEnemy(rank: number): BasicEnemy {
 		facingDirection: new Vec2(1, 0),
 		maxHealth: State.basicEnemyInitialHealthByRank[rank],
 		currentHealth: State.basicEnemyInitialHealthByRank[rank],
+		isVisible: false,
 	};
 }
 
@@ -353,15 +398,12 @@ export function onEnemyKilled(enemy: BasicEnemy) {
 }
 
 export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
+	const newPosition = bullet.position.add(bullet.velocity.scale(deltaSeconds));
 	for(const enemy of State.basicEnemies) {
 		// skip already dead enemies
 		if(enemy.currentHealth <= 0) continue;
 		// perform line-segment to circle intersection test to see if we hit an enemy
-		const toEnemy = enemy.position.sub(bullet.position);
-		const alongBullet = bullet.velocity.normalize().scale(toEnemy.dot(bullet.velocity.normalize()));
-		const closestPoint = bullet.position.add(alongBullet);
-		const distToEnemy = enemy.position.sub(closestPoint).length();
-		if(distToEnemy <= PHYSICS.BASIC_ENEMY_RADIUS) {
+		if(testLineSegmentCircleIntersection(bullet.position, newPosition, enemy.position, PHYSICS.BASIC_ENEMY_RADIUS)) {
 			// hit! apply damage and end the bullet's life
 			enemy.currentHealth -= 1;
 			bullet.lifetime = 0;
@@ -369,7 +411,7 @@ export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
 		}
 	}
 	// update fields
-	bullet.position = bullet.position.add(bullet.velocity.scale(deltaSeconds));
+	bullet.position = newPosition;
 	bullet.lifetime -= deltaSeconds;
 	return bullet;
 }
@@ -401,6 +443,7 @@ export function updatePhysics(deltaSeconds: number) {
 		.map(bullet => updateBullet(deltaSeconds, bullet))
 		.filter(bullet => bullet.lifetime > 0);
 	// Tick all enemies
+	const cullingBounds = rectToBounds(inflateRect(State.worldSpaceClip, PHYSICS.BASIC_ENEMY_RADIUS * 2));
 	for(const enemy of State.basicEnemies) {
 		// apply velocity, reflecting off their arena bounds
 		const enemyBounds = rectToBounds(getZoneRect(enemy.rank, enemy.rank + 1, false));
@@ -421,6 +464,9 @@ export function updatePhysics(deltaSeconds: number) {
 			newPosition = new Vec2(newPosition.x, enemyBounds.max.y + (enemyBounds.max.y - newPosition.y));
 			enemy.facingDirection = new Vec2(enemy.facingDirection.x, -enemy.facingDirection.y);
 		}
+		enemy.position = newPosition;
+		// recalculate culling
+		enemy.isVisible = boundsContainsPoint(cullingBounds, enemy.position);
 	}
 	// Remove dead enemies and trigger on kill effects
 	State.basicEnemies = State.basicEnemies.filter(enemy => {
