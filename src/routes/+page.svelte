@@ -1,6 +1,13 @@
 <script lang="ts">
-    import {State, COLORS, Vec2, updateAll, PHYSICS, rectToBounds, regenerateDependencyGraph} from "$lib/models";
+    import {
+        State,
+        COLORS,
+        updateAll,
+        PHYSICS,
+        regenerateDependencyGraph
+    } from "$lib/models";
     import {onMount} from "svelte";
+    import Vec2 from "$lib/vec2";
 
     let bottomCanvas: HTMLCanvasElement;
     let topCanvas: HTMLCanvasElement;
@@ -19,8 +26,8 @@
         resizeCanvas(bottomCanvas);
         State.canvasWidthHeight = new Vec2(bottomCanvas.width, bottomCanvas.height);
 
-        renderBottom(bottomCanvas.getContext('2d'));
-        renderTop(topCanvas.getContext('2d'));
+        renderBottom(bottomCanvas.getContext('2d')!);
+        renderTop(topCanvas.getContext('2d')!);
     }
 
     function renderTop(ctx: CanvasRenderingContext2D) {
@@ -59,7 +66,7 @@
 
     function drawUpgrades(ctx: CanvasRenderingContext2D) {
         ctx.save();
-	    const nodes = Array.from(State.upgradeUINodes.entries());
+        const nodes = Array.from(State.upgradeUINodes.entries());
         ctx.strokeStyle = COLORS.UPGRADE_COLOR;
         ctx.lineWidth = 4;
         ctx.lineCap = 'round';
@@ -68,9 +75,9 @@
         ctx.translate(topCanvas.width * 0.5, topCanvas.height * 0.5);
         ctx.translate(-State.upgradeUICenter.x, -State.upgradeUICenter.y);
 
-        for(const [id, node] of nodes) {
-            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
-                const childNode = State.upgradeUINodes.get(childId);
+        for (const [id, node] of nodes) {
+            for (const childId of State.save.dependencyGraph.get(id) ?? []) {
+                const childNode = State.upgradeUINodes.get(childId)!;
                 ctx.beginPath();
                 ctx.moveTo(node.position.x, node.position.y);
                 ctx.lineTo(childNode.position.x, childNode.position.y);
@@ -78,10 +85,10 @@
             }
         }
 
-        for(const [id, node] of nodes) {
+        for (const [id, node] of nodes) {
             const isObtained = State.save.obtainedUpgrades.includes(id);
             let allPrereqsSatisfied = true;
-            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
+            for (const childId of State.save.dependencyGraph.get(id) ?? []) {
                 allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
             }
             ctx.beginPath();
@@ -137,24 +144,24 @@
 
         const MARGIN = 2;
         const GRID_SPACING = 200;
-        const worldBounds = rectToBounds(State.worldSpaceClip);
-        
-        let pointer = Math.floor((worldBounds.min.x - MARGIN) / GRID_SPACING) * GRID_SPACING;
+        const worldBounds = State.worldSpaceClip;
 
-        while(pointer <= worldBounds.max.x + MARGIN) {
+        let pointer = Math.floor((worldBounds.minX - MARGIN) / GRID_SPACING) * GRID_SPACING;
+
+        while (pointer <= worldBounds.maxX + MARGIN) {
             ctx.beginPath();
-            ctx.moveTo(pointer, worldBounds.min.y);
-            ctx.lineTo(pointer, worldBounds.max.y);
+            ctx.moveTo(pointer, worldBounds.minY);
+            ctx.lineTo(pointer, worldBounds.maxY);
             ctx.stroke();
             pointer += GRID_SPACING;
         }
-        
-        pointer = Math.floor((worldBounds.min.y - MARGIN) / GRID_SPACING) * GRID_SPACING;
 
-        while(pointer <= worldBounds.max.y + MARGIN) {
+        pointer = Math.floor((worldBounds.minY - MARGIN) / GRID_SPACING) * GRID_SPACING;
+
+        while (pointer <= worldBounds.maxY + MARGIN) {
             ctx.beginPath();
-            ctx.moveTo(worldBounds.min.x, pointer);
-            ctx.lineTo(worldBounds.max.x, pointer);
+            ctx.moveTo(worldBounds.minX, pointer);
+            ctx.lineTo(worldBounds.maxX, pointer);
             ctx.stroke();
             pointer += GRID_SPACING;
         }
@@ -163,15 +170,15 @@
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D) {
-        const { x, y } = State.mousePosition;
+        const {x, y} = State.mousePosition;
         const size = 4; // Half-length of the crosshair lines
 
         ctx.save();
         ctx.translate(x, y);
-        
+
         ctx.strokeStyle = COLORS.CROSSHAIR;
         ctx.lineWidth = 4 / State.cameraScale; // Keep lines thin regardless of scale
-        
+
         ctx.beginPath();
         // Horizontal line
         ctx.moveTo(-size, 0);
@@ -183,7 +190,7 @@
 
         ctx.restore();
     }
-                                                                                                                                                                                                                                                                                                    
+
     function drawBullets(ctx: CanvasRenderingContext2D) {
         ctx.save();
         ctx.strokeStyle = COLORS.PLAYER_BULLET;
@@ -205,8 +212,8 @@
     }
 
     function drawEnemies(ctx: CanvasRenderingContext2D) {
-        for(const enemy of State.basicEnemies) {
-            if(!enemy.isVisible) {
+        for (const enemy of State.basicEnemies) {
+            if (!enemy.isVisible) {
                 continue;
             }
             ctx.save();
@@ -222,7 +229,7 @@
             let pointer = enemy.facingDirection.scale(vertexRadius);
             ctx.beginPath();
             ctx.moveTo(pointer.x, pointer.y);
-            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+            for (let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
                 pointer = pointer.rotate(polygonAngle);
                 ctx.lineTo(pointer.x, pointer.y);
             }
@@ -232,7 +239,7 @@
             pointer = enemy.facingDirection.scale(innerVertexRadius);
             ctx.beginPath();
             ctx.moveTo(pointer.x, pointer.y);
-            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+            for (let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
                 pointer = pointer.rotate(polygonAngle);
                 ctx.lineTo(pointer.x, pointer.y);
             }
@@ -243,9 +250,9 @@
     }
 
     function drawPlayer(ctx: CanvasRenderingContext2D) {
-        const { x, y } = State.playerPosition;
+        const {x, y} = State.playerPosition;
         const angle = Math.atan2(State.facingDirection.y, State.facingDirection.x);
-        
+
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(angle);
@@ -261,7 +268,7 @@
 
         ctx.fillStyle = COLORS.PLAYER;
         ctx.fill();
-        
+
         ctx.restore();
     }
 
@@ -310,11 +317,12 @@
     });
 </script>
 
-<svelte:window on:keydown={onKey} on:mousemove={handleMouseMove} />
+<svelte:window on:keydown={onKey} on:mousemove={handleMouseMove}/>
 
 <div class="container">
     <canvas bind:this={topCanvas} style="height: {splitPercent}%"></canvas>
-    <canvas bind:this={bottomCanvas} style="height: {100 - splitPercent}%"></canvas>
+    <canvas bind:this={bottomCanvas}
+            style="height: {100 - splitPercent}%"></canvas>
 </div>
 
 <style>
