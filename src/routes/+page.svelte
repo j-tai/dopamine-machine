@@ -1,33 +1,165 @@
 <script lang="ts">
-    import {State, COLORS, Vec2, updateAll} from "$lib/models";
+    import {State, COLORS, Vec2, updateAll, PHYSICS, rectToBounds, regenerateDependencyGraph} from "$lib/models";
     import {onMount} from "svelte";
 
-    let canvas: HTMLCanvasElement;
-
-    const cameraScale = 2;
+    let bottomCanvas: HTMLCanvasElement;
+    let topCanvas: HTMLCanvasElement;
 
     let lastTime = 0;
+    let splitPercent = 10;
+
+    function resizeCanvas(canvas: HTMLCanvasElement) {
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+    }
 
     function render() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        resizeCanvas(topCanvas);
+        resizeCanvas(bottomCanvas);
+        State.canvasWidthHeight = new Vec2(bottomCanvas.width, bottomCanvas.height);
 
-        const ctx = canvas.getContext('2d');
+        renderBottom(bottomCanvas.getContext('2d'));
+        renderTop(topCanvas.getContext('2d'));
+    }
+
+    function renderTop(ctx: CanvasRenderingContext2D) {
         if (!ctx) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, topCanvas.width, topCanvas.height);
+
+        // Background
+        ctx.fillStyle = COLORS.BACKGROUND_UPGRADES;
+        ctx.fillRect(0, 0, topCanvas.width, topCanvas.height);
+
+        drawUpgrades(ctx);
+    }
+
+    function renderBottom(ctx: CanvasRenderingContext2D) {
+        if (!ctx) return;
+        ctx.clearRect(0, 0, bottomCanvas.width, bottomCanvas.height);
 
         // Background
         ctx.fillStyle = COLORS.BACKGROUND;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, bottomCanvas.width, bottomCanvas.height);
 
         // Set up camera (Center of screen, +Y up)
         ctx.resetTransform();
-        ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
-        ctx.scale(cameraScale, -cameraScale);
+        ctx.translate(bottomCanvas.width * 0.5, bottomCanvas.height * 0.5);
+        ctx.scale(State.cameraScale, -State.cameraScale);
+        ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
+        drawGrid(ctx);
         drawBullets(ctx);
+        drawEnemies(ctx);
         drawPlayer(ctx);
         drawCrosshair(ctx);
+        ctx.resetTransform();
+        drawWallet(ctx);
+    }
+
+    function drawUpgrades(ctx: CanvasRenderingContext2D) {
+        ctx.save();
+	    const nodes = Array.from(State.upgradeUINodes.entries());
+        ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+
+        // center the upgrade graph
+        ctx.translate(topCanvas.width * 0.5, topCanvas.height * 0.5);
+        ctx.translate(-State.upgradeUICenter.x, -State.upgradeUICenter.y);
+
+        for(const [id, node] of nodes) {
+            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
+                const childNode = State.upgradeUINodes.get(childId);
+                ctx.beginPath();
+                ctx.moveTo(node.position.x, node.position.y);
+                ctx.lineTo(childNode.position.x, childNode.position.y);
+                ctx.stroke();
+            }
+        }
+
+        for(const [id, node] of nodes) {
+            const isObtained = State.save.obtainedUpgrades.includes(id);
+            let allPrereqsSatisfied = true;
+            for(const childId of State.save.dependencyGraph.get(id) ?? []) {
+                allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
+            }
+            ctx.beginPath();
+            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 20 : 10), 0, 2 * Math.PI);
+            ctx.fillStyle = COLORS.UPGRADE_COLOR;
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+
+    function drawWallet(ctx: CanvasRenderingContext2D) {
+        const relativeTime = performance.now() / 1000;
+        State.save.basicRankCurrency.forEach((amount, rank) => {
+            const vertexRadius = 18;
+            const numSides = rank + 3; // rank 0 = triangle, rank 1 = square, etc.
+            const x = 40;
+            const y = bottomCanvas.height - 40 - rank * 50;
+            const spinRate = 3 / numSides;
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Draw polygon
+            ctx.beginPath();
+            let pointer = new Vec2(vertexRadius, 0).rotate(relativeTime * spinRate);
+            const polygonAngle = (Math.PI * 2) / numSides;
+            for (let i = 0; i < numSides; i++) {
+                if (i === 0) ctx.moveTo(pointer.x, pointer.y);
+                else ctx.lineTo(pointer.x, pointer.y);
+                pointer = pointer.rotate(polygonAngle);
+            }
+            ctx.closePath();
+            ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[rank];
+            ctx.fill();
+
+            // Draw amount text
+            ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[rank];
+            ctx.font = '24px monospace';
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${amount}`, vertexRadius + 8, 0);
+
+            ctx.restore();
+        });
+    }
+
+    function drawGrid(ctx: CanvasRenderingContext2D) {
+        ctx.save();
+        ctx.strokeStyle = COLORS.GRID;
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'round';
+
+        const MARGIN = 2;
+        const GRID_SPACING = 200;
+        const worldBounds = rectToBounds(State.worldSpaceClip);
+        
+        let pointer = Math.floor((worldBounds.min.x - MARGIN) / GRID_SPACING) * GRID_SPACING;
+
+        while(pointer <= worldBounds.max.x + MARGIN) {
+            ctx.beginPath();
+            ctx.moveTo(pointer, worldBounds.min.y);
+            ctx.lineTo(pointer, worldBounds.max.y);
+            ctx.stroke();
+            pointer += GRID_SPACING;
+        }
+        
+        pointer = Math.floor((worldBounds.min.y - MARGIN) / GRID_SPACING) * GRID_SPACING;
+
+        while(pointer <= worldBounds.max.y + MARGIN) {
+            ctx.beginPath();
+            ctx.moveTo(worldBounds.min.x, pointer);
+            ctx.lineTo(worldBounds.max.x, pointer);
+            ctx.stroke();
+            pointer += GRID_SPACING;
+        }
+
+        ctx.restore();
     }
 
     function drawCrosshair(ctx: CanvasRenderingContext2D) {
@@ -38,7 +170,7 @@
         ctx.translate(x, y);
         
         ctx.strokeStyle = COLORS.CROSSHAIR;
-        ctx.lineWidth = 4 / cameraScale; // Keep lines thin regardless of scale
+        ctx.lineWidth = 4 / State.cameraScale; // Keep lines thin regardless of scale
         
         ctx.beginPath();
         // Horizontal line
@@ -55,7 +187,7 @@
     function drawBullets(ctx: CanvasRenderingContext2D) {
         ctx.save();
         ctx.strokeStyle = COLORS.PLAYER_BULLET;
-        ctx.lineWidth = 4 / cameraScale;
+        ctx.lineWidth = 2;
         ctx.lineCap = 'round';
 
         for (const bullet of State.playerBullets) {
@@ -70,6 +202,44 @@
             ctx.stroke();
         }
         ctx.restore();
+    }
+
+    function drawEnemies(ctx: CanvasRenderingContext2D) {
+        for(const enemy of State.basicEnemies) {
+            if(!enemy.isVisible) {
+                continue;
+            }
+            ctx.save();
+            ctx.translate(enemy.position.x, enemy.position.y);
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[enemy.rank];
+            const polygonN = 3 + enemy.rank;
+            const polygonAngle = Math.PI * 2 / polygonN;
+            const vertexRadius = PHYSICS.BASIC_ENEMY_RADIUS / Math.cos(Math.PI / polygonN);
+            const innerVertexRadius = vertexRadius * Math.max(0, enemy.currentHealth) / enemy.maxHealth;
+
+            let pointer = enemy.facingDirection.scale(vertexRadius);
+            ctx.beginPath();
+            ctx.moveTo(pointer.x, pointer.y);
+            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+                pointer = pointer.rotate(polygonAngle);
+                ctx.lineTo(pointer.x, pointer.y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            pointer = enemy.facingDirection.scale(innerVertexRadius);
+            ctx.beginPath();
+            ctx.moveTo(pointer.x, pointer.y);
+            for(let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
+                pointer = pointer.rotate(polygonAngle);
+                ctx.lineTo(pointer.x, pointer.y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
     }
 
     function drawPlayer(ctx: CanvasRenderingContext2D) {
@@ -96,20 +266,30 @@
     }
 
     function onKey(event: KeyboardEvent) {
-
+        if (event.key === 'q' || event.key === 'Q') {
+            splitPercent = Math.max(10, splitPercent - 10);
+        }
+        if (event.key === 'e' || event.key === 'E') {
+            splitPercent = Math.min(90, splitPercent + 10);
+        }
+        if (event.key === '9') {
+            // Debug functionality
+            regenerateDependencyGraph(false);
+        }
     }
 
     function handleMouseMove(event: MouseEvent) {
-        // Convert screen space to world space
-        // 1. Center origin
-        let worldX = event.clientX - window.innerWidth / 2;
-        let worldY = event.clientY - window.innerHeight / 2;
-        
-        // 2. Adjust for camera scale and inverted Y axis
-        worldX /= cameraScale;
-        worldY /= -cameraScale;
+        const rect = bottomCanvas.getBoundingClientRect();
 
-        State.mousePosition = new Vec2(worldX, worldY);
+        // Position relative to the center of bottomCanvas
+        let worldX = event.clientX - (rect.left + rect.width / 2);
+        let worldY = event.clientY - (rect.top + rect.height / 2);
+
+        // Adjust for camera scale and inverted Y axis
+        worldX /= State.cameraScale;
+        worldY /= -State.cameraScale;
+
+        State.screenMousePosition = new Vec2(worldX, worldY);
     }
 
     function runAnimationFrame(currentTime: number) {
@@ -132,15 +312,24 @@
 
 <svelte:window on:keydown={onKey} on:mousemove={handleMouseMove} />
 
-<canvas bind:this={canvas}></canvas>
+<div class="container">
+    <canvas bind:this={topCanvas} style="height: {splitPercent}%"></canvas>
+    <canvas bind:this={bottomCanvas} style="height: {100 - splitPercent}%"></canvas>
+</div>
 
 <style>
-    canvas {
+    .container {
         position: fixed;
         top: 0;
         left: 0;
         width: 100vw;
         height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    canvas {
+        width: 100%;
         display: block;
     }
 </style>
