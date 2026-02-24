@@ -5,7 +5,7 @@ import Vec2 from '$lib/vec2';
 
 describe('getZoneRect', () => {
 	test('zone 0', () => {
-		expect(getZoneRect(0, 1, true)).toEqual(
+		expect(getZoneRect(0, true)).toEqual(
 			Rect.fromCenterAndSize(
 				Vec2.ZERO,
 				new Vec2(PHYSICS.WIDTH_PER_ZONE, PHYSICS.HEIGHT_FOR_PLAYER),
@@ -14,7 +14,7 @@ describe('getZoneRect', () => {
 	});
 
 	test('zone 1', () => {
-		expect(getZoneRect(1, 2, true)).toEqual(
+		expect(getZoneRect(1, true)).toEqual(
 			Rect.fromCenterAndSize(
 				new Vec2(PHYSICS.WIDTH_PER_ZONE, 0),
 				new Vec2(PHYSICS.WIDTH_PER_ZONE, PHYSICS.HEIGHT_FOR_PLAYER),
@@ -22,11 +22,11 @@ describe('getZoneRect', () => {
 		);
 	});
 
-	test('zone 2-3', () => {
-		expect(getZoneRect(2, 4, true)).toEqual(
+	test('zone 2 for enemies', () => {
+		expect(getZoneRect(2, false)).toEqual(
 			Rect.fromCenterAndSize(
-				new Vec2(PHYSICS.WIDTH_PER_ZONE * 2.5, 0),
-				new Vec2(PHYSICS.WIDTH_PER_ZONE * 2, PHYSICS.HEIGHT_FOR_PLAYER),
+				new Vec2(PHYSICS.WIDTH_PER_ZONE * 2, 0),
+				new Vec2(PHYSICS.WIDTH_PER_ZONE, PHYSICS.HEIGHT_FOR_ENEMIES),
 			),
 		);
 	});
