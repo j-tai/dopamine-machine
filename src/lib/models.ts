@@ -706,9 +706,7 @@ export function updatePhysics(deltaSeconds: number) {
 		.map((bullet) => updateBullet(deltaSeconds, bullet))
 		.filter((bullet) => bullet.lifetime > 0);
 	// Tick all enemies
-	const cullingBounds = State.worldSpaceClip.grow(
-		new Vec2(PHYSICS.BASIC_ENEMY_RADIUS, PHYSICS.BASIC_ENEMY_RADIUS).scale(2),
-	);
+	const cullingBounds = State.worldSpaceClip.grow(PHYSICS.BASIC_ENEMY_RADIUS * 2);
 	for (const enemy of State.basicEnemies) {
 		// apply velocity, reflecting off their arena bounds
 		const enemyBounds = getZoneRect(enemy.rank, false);
