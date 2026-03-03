@@ -4,7 +4,12 @@
         COLORS,
         updateAll,
         PHYSICS,
-        regenerateDependencyGraph
+        regenerateDependencyGraph,
+        getAvailableUpgrades,
+        selectNextAvailable,
+        canAfford,
+        purchaseUpgrade,
+        formatCost,
     } from "$lib/models";
     import {onMount} from "svelte";
     import Vec2 from "$lib/vec2";
@@ -14,6 +19,11 @@
 
     let lastTime = 0;
     let splitPercent = 10;
+    // Local UI selection mirror (keep State.selectedUpgradeId in sync)
+    let selectedUpgradeId: number | null = State.selectedUpgradeId;
+    // bump to force reactive recomputations when the underlying State changes outside Svelte reactivity
+    let uiVersion = 0;
+    function bumpUI() { uiVersion++; }
 
     function resizeCanvas(canvas: HTMLCanvasElement) {
         const rect = canvas.getBoundingClientRect();
@@ -273,6 +283,32 @@
     }
 
     function onKey(event: KeyboardEvent) {
+        // Tab: cycle selection through available upgrades (MVP behavior)
+        if (event.key === 'Tab') {
+            event.preventDefault();
+            const next = selectNextAvailable(State.selectedUpgradeId ?? selectedUpgradeId ?? null);
+            selectedUpgradeId = next;
+            State.selectedUpgradeId = next;
+            bumpUI();
+            return;
+        }
+
+        // Purchase with 'w' or 'W'
+        if (event.key === 'w' || event.key === 'W') {
+            if (selectedUpgradeId != null) {
+                const res = purchaseUpgrade(selectedUpgradeId);
+                if (res.success) {
+                    // keep selected id; it will now be in obtained list
+                    bumpUI();
+                } else {
+                    // nothing fancy for MVP
+                    bumpUI();
+                }
+            }
+            return;
+        }
+
+        // existing split controls
         let deltaSplitPercent = 0;
         if (event.key === 'q' || event.key === 'Q') {
             deltaSplitPercent = -100;
@@ -317,6 +353,41 @@
         requestAnimationFrame(runAnimationFrame);
     }
 
+    // UI reactive values for selected upgrade
+    let selectedDef: any = null;
+    let isObtained = false;
+    let purchasable = false;
+    let costItems: { rank: number; amount: number }[] = [];
+
+    function svgPolygonPoints(sides: number, radius = 12) {
+        const pts: string[] = [];
+        const startAngle = -Math.PI / 2; // point up
+        for (let i = 0; i < sides; i++) {
+            const a = startAngle + (i * 2 * Math.PI) / sides;
+            const x = Math.cos(a) * radius;
+            const y = Math.sin(a) * radius;
+            pts.push(`${x},${y}`);
+        }
+        return pts.join(' ');
+    }
+
+    // Recompute derived UI state when selection or uiVersion changes
+    $: {
+        const id = selectedUpgradeId;
+        const v = uiVersion; // ensure this reactive block runs when we bumpUI()
+        if (id == null) {
+            selectedDef = null;
+            isObtained = false;
+            purchasable = false;
+            costItems = [];
+        } else {
+            selectedDef = State.upgradeDefinitions.get(id) ?? null;
+            isObtained = selectedDef ? State.save.obtainedUpgrades.includes(id) : false;
+            purchasable = selectedDef ? (!isObtained && canAfford(selectedDef.cost)) : false;
+            costItems = selectedDef ? formatCost(selectedDef.cost) : [];
+        }
+    }
+
     onMount(() => {
         const loop = requestAnimationFrame(runAnimationFrame);
         return () => cancelAnimationFrame(loop);
@@ -329,6 +400,35 @@
     <canvas bind:this={topCanvas} style="height: {splitPercent}%"></canvas>
     <canvas bind:this={bottomCanvas}
             style="height: {100 - splitPercent}%"></canvas>
+</div>
+
+<!-- Upgrade info panel (top-right of the top panel) -->
+<div class="upgrade-panel">
+    {#if selectedDef}
+        <div class="upgrade-title">{selectedDef.name}</div>
+        <div class="upgrade-desc">{selectedDef.description}</div>
+        <div class="upgrade-costs">
+            {#each costItems as item}
+                <div class="cost-item">
+                    <svg class="poly-icon" width="28" height="28" viewBox="-16 -16 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                        <g transform="scale(1,-1)">
+                            <polygon points={svgPolygonPoints(item.rank + 3, 12)} fill={COLORS.ENEMY_COLOR_BY_RANK[item.rank]}/>
+                        </g>
+                    </svg>
+                    <div class="cost-amt">{item.amount}</div>
+                </div>
+            {/each}
+        </div>
+        <div class="purchase-hint" class:disabled={!purchasable || isObtained}>
+            {#if isObtained}
+                Already purchased
+            {:else}
+                Press W to purchase
+            {/if}
+        </div>
+    {:else}
+        <div class="no-selection">No upgrade selected</div>
+    {/if}
 </div>
 
 <style>
@@ -347,4 +447,40 @@
         display: block;
         transition: height 0.8s cubic-bezier(0.19,1.00,0.22,1.00);
     }
+
+    /* Upgrade panel (top-right) */
+    .upgrade-panel {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        width: 320px;
+        background: rgba(10, 10, 12, 0.6);
+        color: #fff;
+        padding: 10px;
+        border-radius: 8px;
+        font-family: monospace;
+        pointer-events: none; /* MVP: keyboard-only for purchase */
+    }
+
+    .upgrade-title {
+        font-weight: 700;
+        font-size: 16px;
+        margin-bottom: 6px;
+    }
+
+    .upgrade-desc {
+        font-size: 12px;
+        opacity: 0.9;
+        margin-bottom: 8px;
+    }
+
+    .upgrade-costs { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+    .cost-item { display:flex; gap:6px; align-items:center; }
+    .poly-icon { display:block; }
+    .cost-amt { font-size: 13px; }
+
+    .purchase-hint { font-size: 13px; opacity: 0.95; }
+    .purchase-hint.disabled { opacity: 0.45; }
+
+    .no-selection { color: #ddd; font-size: 13px; }
 </style>

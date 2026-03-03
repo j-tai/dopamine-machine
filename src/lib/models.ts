@@ -89,6 +89,87 @@ export function polyElementwise(
 	return result;
 }
 
+// --- Upgrade / purchase utility helpers ---
+
+/** Get the upgrade definition for an id, or undefined if missing. */
+export function getUpgradeDef(id: number) {
+	return State.upgradeDefinitions.get(id);
+}
+
+/** Returns true if all prereqs for this upgrade id are satisfied (or there are none). */
+export function isPrereqsSatisfied(id: number): boolean {
+	const prereqs = State.save.dependencyGraph.get(id) ?? [];
+	return prereqs.every((p) => State.save.obtainedUpgrades.includes(p));
+}
+
+/** Returns list of upgrade ids that are not yet obtained and have all prereqs satisfied, in ascending integer order. */
+export function getAvailableUpgrades(): number[] {
+	const ids = Array.from(State.upgradeDefinitions.keys()).sort((a, b) => a - b);
+	return ids.filter((id) => !State.save.obtainedUpgrades.includes(id) && isPrereqsSatisfied(id));
+}
+
+/** Select the next available upgrade in integer order, wrapping. Returns null if none available. */
+export function selectNextAvailable(currentId?: number | null): number | null {
+	const list = getAvailableUpgrades();
+	if (list.length === 0) return null;
+	if (currentId == null) return list[0];
+	const idx = list.indexOf(currentId);
+	if (idx === -1) return list[0];
+	return list[(idx + 1) % list.length];
+}
+
+/** Returns true if the provided polynomial cost can be paid by State.save.basicRankCurrency. */
+export function canAfford(cost: Polynomial): boolean {
+	// cost <= currency elementwise
+	return allElementsLe(cost, State.save.basicRankCurrency);
+}
+
+/** Pure math: returns true if for all indices i, a[i] <= b[i]. Missing indices are treated as 0. */
+export function allElementsLe(a: Polynomial, b: Polynomial): boolean {
+	const maxLen = Math.max(a.length, b.length);
+	for (let i = 0; i < maxLen; i++) {
+		if (polyGetAtIndex(a, i) > polyGetAtIndex(b, i)) return false;
+	}
+	return true;
+}
+
+/** Subtracts `cost` from State.save.basicRankCurrency. Assumes caller checked canAfford. */
+export function applyCost(cost: Polynomial): void {
+	// Work on a copy so we can re-normalize and assign back
+	const newPoly: Polynomial = State.save.basicRankCurrency.slice();
+	for (let i = 0; i < cost.length; i++) {
+		const prev = polyGetAtIndex(newPoly, i);
+		const c = polyGetAtIndex(cost, i);
+		const updated = prev - c;
+		newPoly[i] = updated;
+	}
+	polyNormalizeInPlace(newPoly);
+	State.save.basicRankCurrency = newPoly;
+}
+
+/** Attempt to purchase an upgrade by id. Returns success boolean and optional reason. */
+export function purchaseUpgrade(id: number): { success: boolean; reason?: string } {
+	if (State.save.obtainedUpgrades.includes(id)) return { success: false, reason: 'already_obtained' };
+	if (!isPrereqsSatisfied(id)) return { success: false, reason: 'prereqs_not_satisfied' };
+	const def = getUpgradeDef(id);
+	if (!def) return { success: false, reason: 'not_found' };
+	if (!canAfford(def.cost)) return { success: false, reason: 'insufficient_funds' };
+	applyCost(def.cost);
+	State.save.obtainedUpgrades.push(id);
+	def.applyUpgrade();
+	return { success: true };
+}
+
+/** Convert a polynomial cost into an array of {rank, amount} entries (skips zero entries). */
+export function formatCost(cost: Polynomial): { rank: number; amount: number }[] {
+	const out: { rank: number; amount: number }[] = [];
+	for (let i = 0; i < cost.length; i++) {
+		const amt = polyGetAtIndex(cost, i);
+		if (amt > 0) out.push({ rank: i, amount: amt });
+	}
+	return out;
+}
+
 export function polyAdd(poly1: Polynomial, poly2: Polynomial): Polynomial {
 	return polyElementwise(poly1, poly2, (a, b) => a + b);
 }
@@ -263,6 +344,9 @@ export const State = {
 		obtainedUpgrades: [] as number[],
 	},
 	upgradeCache: structuredClone(CLEAN_UPGRADE_CACHE) as UpgradeCacheType,
+
+	// UI selection state (MVP): currently selected upgrade id in UI, or null
+	selectedUpgradeId: null as number | null,
 
 	canvasWidthHeight: new Vec2(800, 600),
 	/** The area of the world currently visible on screen, used for culling. Centered on the camera position. */
