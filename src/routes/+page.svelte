@@ -92,6 +92,7 @@
         ctx.translate(topCanvas.width * 0.5, topCanvas.height * 0.5);
         ctx.translate(-State.upgradeUICenter.x, -State.upgradeUICenter.y);
 
+        const cycleTime = (performance.now() * 0.0005) % 1;
         for (const [id, node] of nodes) {
             for (const childId of State.save.dependencyGraph.get(id) ?? []) {
                 const childNode = State.upgradeUINodes.get(childId)!;
@@ -99,10 +100,15 @@
                 ctx.moveTo(node.position.x, node.position.y);
                 ctx.lineTo(childNode.position.x, childNode.position.y);
                 ctx.stroke();
+                // draw a small packet from parent to child to indicate direction
+                const interpolatedPos = node.position.add(childNode.position.sub(node.position).scale(cycleTime));
+                ctx.beginPath();
+                ctx.arc(interpolatedPos.x, interpolatedPos.y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = COLORS.UPGRADE_COLOR;
+                ctx.fill();
             }
         }
 
-        const cycleTime = (performance.now() * 0.0005) % 1;
         const ringRadius = 30 - 20 * Math.pow(1 - cycleTime, 2);
         const ringAlpha = Math.min(1, (1 - cycleTime) * 4);
         const ringColor = setHexAlpha(COLORS.UPGRADE_COLOR, ringAlpha);
