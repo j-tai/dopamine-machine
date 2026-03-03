@@ -21,6 +21,7 @@
     let splitPercent = 10;
     // Local UI selection mirror (keep State.selectedUpgradeId in sync)
     let selectedUpgradeId: number | null = State.selectedUpgradeId;
+    let selectedUpgradeCursor: Vec2 = new Vec2(0, 0);
     // bump to force reactive recomputations when the underlying State changes outside Svelte reactivity
     let uiVersion = 0;
     function bumpUI() { uiVersion++; }
@@ -139,12 +140,14 @@
             }
         }
 
-        if(State.selectedUpgradeId != null) {
-            const selectedNode = State.upgradeUINodes.get(State.selectedUpgradeId);
+        if(selectedUpgradeId != null) {
+            const selectedNode = State.upgradeUINodes.get(selectedUpgradeId);
             if (selectedNode) {
+                // move cursor toward selected upgrade
+                selectedUpgradeCursor = selectedUpgradeCursor.add(selectedNode.position.sub(selectedUpgradeCursor).scale(0.1));
                 // constant ring effect for selected upgrade
                 ctx.beginPath();
-                ctx.arc(selectedNode.position.x, selectedNode.position.y, 40 + Math.sin(cycleTime * Math.PI * 2) * 5, 0, 2 * Math.PI);
+                ctx.arc(selectedUpgradeCursor.x, selectedUpgradeCursor.y, 40 + Math.sin(cycleTime * Math.PI * 2) * 5, 0, 2 * Math.PI);
                 ctx.strokeStyle = COLORS.UPGRADE_COLOR;
                 ctx.lineWidth = 4;
                 ctx.stroke();
