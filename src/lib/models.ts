@@ -864,6 +864,7 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 }
 
 export function updateAll(deltaSeconds: number) {
+	deltaSeconds = Math.min(1.0, Math.max(1e-9, deltaSeconds)); // clamp to a sane but permissive range
 	State.cameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
 	regenerateDependencyGraph(true);
 	updateCamera(deltaSeconds);
