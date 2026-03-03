@@ -720,10 +720,13 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 		for (const dep of dependents) graph.get(prereq)!.add(dep);
 
 	const candidates: [number, number][] = [];
-	for (let i = 0; i < topoOrder.length; i++)
-		for (let j = i + 1; j < topoOrder.length; j++)
-			if (!graph.get(topoOrder[i])!.has(topoOrder[j]))
-				candidates.push([topoOrder[i], topoOrder[j]]);
+	for (let i = 0; i < topoOrder.length; i++) {
+		// Chain-like algorithm biased to nearby nodes
+		const j = i + 1;
+		if(j < topoOrder.length) {
+			candidates.push([topoOrder[i], topoOrder[j]]);
+		}
+	}
 	candidates.sort(() => Math.random() - 0.5);
 	for (const [u, v] of candidates.slice(0, UPGRADES_MAX_ADDED_EDGES)) graph.get(u)!.add(v);
 
