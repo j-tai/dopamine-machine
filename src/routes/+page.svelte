@@ -7,6 +7,8 @@
 
     let lastTime = 0;
     let splitPercent = 10;
+    let targetSplitPercent = splitPercent;
+    const SPLIT_LERP_RATE = 0.1; // How quickly the splitPercent catches up to targetSplitPercent (0.1 = 10% per frame)
 
     function resizeCanvas(canvas: HTMLCanvasElement) {
         const rect = canvas.getBoundingClientRect();
@@ -266,12 +268,14 @@
     }
 
     function onKey(event: KeyboardEvent) {
+        let deltaTargetSplitPercent = 0;
         if (event.key === 'q' || event.key === 'Q') {
-            splitPercent = Math.max(10, splitPercent - 10);
+            deltaTargetSplitPercent = -100;
         }
         if (event.key === 'e' || event.key === 'E') {
-            splitPercent = Math.min(90, splitPercent + 10);
+            deltaTargetSplitPercent = 100;
         }
+        targetSplitPercent = Math.min(90, Math.max(10, targetSplitPercent + deltaTargetSplitPercent));
         if (event.key === '9') {
             // Debug functionality
             regenerateDependencyGraph(false);
@@ -299,6 +303,9 @@
         const dt = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
 
+        // Update purely UI elements
+        splitPercent += (targetSplitPercent - splitPercent) * SPLIT_LERP_RATE;
+        // Update physics and other objects
         updateAll(dt);
         render();
         requestAnimationFrame(runAnimationFrame);
