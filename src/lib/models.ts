@@ -482,6 +482,10 @@ export function toRomanNumeral(num: number): string {
 	return result;
 }
 
+export function formatPercent(multiplier: number): string {
+	return `${Math.round(multiplier * 100)}%`;
+}
+
 /// Double shot is the source node for most upgrades
 export const UPGRADE_ID_DOUBLE_SHOT = 2;
 
@@ -512,7 +516,7 @@ export function makeUpgradeBulletSpeedMultiplier(index: number): void {
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
-		description: `Main weapon bullet speed is increased to ${multiplier * 100}%.`,
+		description: `Main weapon bullet speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
 		applyUpgrade: () => {
 			State.upgradeCache.playerBulletSpeedMultiplier = Math.max(
@@ -536,7 +540,7 @@ export function makeUpgradeFlySpeedMultiplier(index: number): void {
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
-		description: `Player fly speed is increased to ${multiplier * 100}%.`,
+		description: `Player fly speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
 		applyUpgrade: () => {
 			State.upgradeCache.playerFlySpeedMultiplier = Math.max(
@@ -560,7 +564,7 @@ export function makeUpgradeTurningSpeedMultiplier(index: number): void {
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
-		description: `Player turning speed is increased to ${multiplier * 100}%.`,
+		description: `Player turning speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
 		applyUpgrade: () => {
 			State.upgradeCache.playerTurningSpeedMultiplier = Math.max(
@@ -584,7 +588,7 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
-		description: `Main weapon firing rate is increased to ${multiplier * 100}%.`,
+		description: `Main weapon firing rate is increased to ${formatPercent(multiplier)}.`,
 		cost,
 		applyUpgrade: () => {
 			State.upgradeCache.playerFireRateMultiplier = Math.max(
