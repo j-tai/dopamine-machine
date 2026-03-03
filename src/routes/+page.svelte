@@ -337,6 +337,6 @@
     canvas {
         width: 100%;
         display: block;
-        transition: height 0.4s ease-out;
+        transition: height 0.8s cubic-bezier(0.19,1.00,0.22,1.00);
     }
 </style>
