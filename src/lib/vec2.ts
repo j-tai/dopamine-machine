@@ -107,6 +107,10 @@ export default class Vec2 {
 		return new Vec2(this.x * cos - this.y * sin, this.x * sin + this.y * cos);
 	}
 
+	rotate90deg(): Vec2 {
+		return new Vec2(-this.y, this.x);
+	}
+
 	dot(other: Vec2): number {
 		return this.x * other.x + this.y * other.y;
 	}

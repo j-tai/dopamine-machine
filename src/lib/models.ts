@@ -201,6 +201,14 @@ export function getZoneRect(zone: number, isPlayer: boolean): Rect {
 	return Rect.fromCenterAndSize(new Vec2(centerX, 0), new Vec2(width, height));
 }
 
+export function getMultiZoneRect(startZone: number, stopZone: number, isPlayer: boolean): Rect {
+	const centerX = PHYSICS.WIDTH_PER_ZONE * (startZone + stopZone - 1) / 2;
+	const width = PHYSICS.WIDTH_PER_ZONE * (stopZone - startZone);
+	const height = isPlayer ? PHYSICS.HEIGHT_FOR_PLAYER : PHYSICS.HEIGHT_FOR_ENEMIES;
+
+	return Rect.fromCenterAndSize(new Vec2(centerX, 0), new Vec2(width, height));
+}
+
 /**
  * Tests whether a line segment (not an infinite line!) intersects with a circle.
  *
@@ -326,6 +334,7 @@ export const CLEAN_UPGRADE_CACHE = {
 	playerFlySpeedMultiplier: 1,
 	playerTurningSpeedMultiplier: 1,
 	playerFireRateMultiplier: 1,
+	lastUnlockedZone: 0,
 };
 
 export type UpgradeCacheType = typeof CLEAN_UPGRADE_CACHE;
@@ -352,13 +361,12 @@ export const State = {
 	/** The area of the world currently visible on screen, used for culling. Centered on the camera position. */
 	worldSpaceClip: Rect.fromCenterAndSize(Vec2.ZERO, new Vec2(800, 600)),
 	cameraScale: 2, // 1 world unit = this many screen pixels
+	targetCameraScale: 2,
 	cameraPosition: Vec2.ZERO,
 	playerPosition: Vec2.ZERO,
 	facingDirection: new Vec2(1, 0),
 	screenMousePosition: Vec2.ZERO, // Mouse position in world scale but not shifted by camera
 	mousePosition: Vec2.ZERO, // World-space mouse position
-	/** Used to clamp player position */
-	arenaBounds: getZoneRect(0, true),
 	playerBullets: [] as Bullet[],
 	playerShootingCharge: 0,
 	basicEnemies: [] as BasicEnemy[],
@@ -452,9 +460,18 @@ export function autoSaveLoad(): void {
 
 	if (loadedSave.latch > currentSave.latch) {
 		State.save = loadedSave;
+		reapplyAllUpgrades();
 	} else {
 		save();
 	}
+}
+
+export function reapplyAllUpgrades(): void {
+	Object.assign(State.upgradeCache, CLEAN_UPGRADE_CACHE);
+	State.save.obtainedUpgrades.forEach((id) => {
+		const def = getUpgradeDef(id);
+		def?.applyUpgrade();
+	});
 }
 
 export function addBaseDependency(prereqId: number, upgradeId: number): void {
@@ -485,6 +502,15 @@ export function toRomanNumeral(num: number): string {
 /// Double shot is the source node for most upgrades
 export const UPGRADE_ID_DOUBLE_SHOT = 2;
 
+export function autoDependencies(upgradeId: number, cost: Polynomial): void {
+	// It is possible to farm squares (rank 1) without actually unlocking zone 1, by sitting on the border
+	// But it would not be possible to farm pentagons (rank 2) without unlocking zone 1 first
+	if(cost.length > 2) {
+		// Need to unlock zone to possibly farm that currency
+		addBaseDependency(500 + (cost.length - 2), upgradeId);
+	}
+}
+
 export function makeUpgradeParallelShots(nshots: number, title: string, cost: Polynomial): void {
 	const id = nshots;
 	State.upgradeDefinitions.set(id, {
@@ -502,6 +528,7 @@ export function makeUpgradeParallelShots(nshots: number, title: string, cost: Po
 	if (nshots > 2) {
 		addBaseDependency(nshots - 1, nshots);
 	}
+	autoDependencies(id, cost);
 }
 
 export function makeUpgradeBulletSpeedMultiplier(index: number): void {
@@ -526,6 +553,7 @@ export function makeUpgradeBulletSpeedMultiplier(index: number): void {
 	} else {
 		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
+	autoDependencies(id, cost);
 }
 
 export function makeUpgradeFlySpeedMultiplier(index: number): void {
@@ -550,6 +578,7 @@ export function makeUpgradeFlySpeedMultiplier(index: number): void {
 	} else {
 		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
+	autoDependencies(id, cost);
 }
 
 export function makeUpgradeTurningSpeedMultiplier(index: number): void {
@@ -574,6 +603,7 @@ export function makeUpgradeTurningSpeedMultiplier(index: number): void {
 	} else {
 		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
+	autoDependencies(id, cost);
 }
 
 export function makeUpgradeFireRateMultiplier(index: number): void {
@@ -598,6 +628,32 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 	} else {
 		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
 	}
+	autoDependencies(id, cost);
+}
+
+export function makeUpgradeLastUnlockedZone(index: number): void {
+	const id = 500 + index;
+	const title = 'Unlock Zone ' + toRomanNumeral(index + 1);
+	const cost = polyOneHot(index, 1000);
+	State.upgradeDefinitions.set(id, {
+		id,
+		name: title,
+		description: `Unlocks zone ${index + 1}.`,
+		cost,
+		applyUpgrade: () => {
+			State.upgradeCache.lastUnlockedZone = Math.max(
+				State.upgradeCache.lastUnlockedZone,
+				index,
+			);
+		},
+	});
+	if (index > 1) {
+		addBaseDependency(id - 1, id);
+	} else {
+		addBaseDependency(UPGRADE_ID_DOUBLE_SHOT, id);
+	}
+	// redundant here
+	// autoDependencies(id, cost);
 }
 
 export function regenerateUpgradeDefinitions(): void {
@@ -611,6 +667,10 @@ export function regenerateUpgradeDefinitions(): void {
 		makeUpgradeFlySpeedMultiplier(i);
 		makeUpgradeTurningSpeedMultiplier(i);
 		makeUpgradeFireRateMultiplier(i);
+		if(i == 0) {
+			continue;
+		}
+		makeUpgradeLastUnlockedZone(i);
 	}
 	// Regenerate UI nodes, initialized to random positions
 	for (const [id, def] of State.upgradeDefinitions) {
@@ -704,6 +764,16 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 	State.save.dependencyGraph = dependencyGraph;
 }
 
+export function parallelShotPositions(startPosition: Vec2, facingDirection: Vec2, numShots: number): Vec2[] {
+	const shotPositions: Vec2[] = [];
+	const spreadUnit = facingDirection.rotate90deg().scale(8 / numShots);
+
+	for (let i = 0; i < numShots; i++) {
+		shotPositions.push(startPosition.add(spreadUnit.scale(numShots - 1 - 2 * i)));
+	}
+	return shotPositions;
+}
+
 export function createBasicEnemy(rank: number): BasicEnemy {
 	return {
 		rank,
@@ -767,23 +837,30 @@ export function updatePhysics(deltaSeconds: number) {
 	);
 	State.playerPosition = State.playerPosition.add(movement);
 	// Clamp player to arena
-	State.playerPosition = State.arenaBounds.clamp(State.playerPosition);
+	State.playerPosition = getMultiZoneRect(0, State.upgradeCache.lastUnlockedZone + 1, true).clamp(State.playerPosition);
 	// Should the player shoot?
 	const modifiedSecondsPerShot =
 		PHYSICS.PLAYER_SECONDS_PER_SHOT / State.upgradeCache.playerFireRateMultiplier;
 	State.playerShootingCharge += deltaSeconds;
+	const forwardParallelShotPositions = parallelShotPositions(
+		State.playerPosition,
+		State.facingDirection,
+		State.upgradeCache.mainWeaponParallelShots,
+	);
 	while (State.playerShootingCharge >= modifiedSecondsPerShot) {
 		State.playerShootingCharge -= modifiedSecondsPerShot;
-		let bullet = {
-			position: State.playerPosition,
-			velocity: State.facingDirection.scale(
-				PHYSICS.PLAYER_BULLET_SPEED * State.upgradeCache.playerBulletSpeedMultiplier,
-			),
-			lifetime: PHYSICS.PLAYER_BULLET_LIFETIME_SECONDS,
-		};
-		State.playerBullets.push(bullet);
-		// apply excess time immediately
-		bullet = updateBullet(State.playerShootingCharge, bullet);
+		forwardParallelShotPositions.forEach((shotPos) => {
+			let bullet = {
+				position: shotPos,
+				velocity: State.facingDirection.scale(
+					PHYSICS.PLAYER_BULLET_SPEED * State.upgradeCache.playerBulletSpeedMultiplier,
+				),
+				lifetime: PHYSICS.PLAYER_BULLET_LIFETIME_SECONDS,
+			};
+			State.playerBullets.push(bullet);
+			// apply excess time immediately
+			bullet = updateBullet(State.playerShootingCharge, bullet);
+		});
 	}
 	// Update bullets and remove expired ones
 	State.playerBullets = State.playerBullets
@@ -949,7 +1026,9 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 
 export function updateAll(deltaSeconds: number) {
 	deltaSeconds = Math.min(1.0, Math.max(1e-9, deltaSeconds)); // clamp to a sane but permissive range
-	State.cameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
+	const CAMERA_SCALE_LERP_RATE = 0.1;
+	State.targetCameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
+	State.cameraScale += (State.targetCameraScale - State.cameraScale) * Math.min(1, deltaSeconds * CAMERA_SCALE_LERP_RATE); // smooth camera zoom
 	regenerateDependencyGraph(true);
 	updateCamera(deltaSeconds);
 	updatePhysics(Math.min(deltaSeconds, 0.1));
