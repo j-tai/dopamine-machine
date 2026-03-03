@@ -103,7 +103,7 @@
                 // draw a small packet from parent to child to indicate direction
                 const interpolatedPos = node.position.add(childNode.position.sub(node.position).scale(cycleTime));
                 ctx.beginPath();
-                ctx.arc(interpolatedPos.x, interpolatedPos.y, 6, 0, 2 * Math.PI);
+                ctx.arc(interpolatedPos.x, interpolatedPos.y, 4, 0, 2 * Math.PI);
                 ctx.fillStyle = COLORS.UPGRADE_COLOR;
                 ctx.fill();
             }
