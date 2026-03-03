@@ -96,9 +96,11 @@ export default class Rect {
 	}
 
 	/**
-	 * Increases the size of the rectangle by the given amount in each direction.
+	 * Increases the size of the rectangle by the given amount, keeping the same
+	 * center point.
 	 *
-	 * The rectangle's new size will be increased by `amount * 2`.
+	 * The new rectangle's size will be increased by `amount`, i.e.,
+	 * `amount * 0.5` in each direction.
 	 */
 	grow(amount: Vec2 | number): Rect {
 		if (typeof amount === 'number') {
