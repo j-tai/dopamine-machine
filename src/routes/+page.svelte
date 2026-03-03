@@ -25,6 +25,13 @@
     let uiVersion = 0;
     function bumpUI() { uiVersion++; }
 
+    function setHexAlpha(hexColor: string, alpha: number): string {
+        const r = parseInt(hexColor.slice(1, 3), 16);
+        const g = parseInt(hexColor.slice(3, 5), 16);
+        const b = parseInt(hexColor.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
     function resizeCanvas(canvas: HTMLCanvasElement) {
         const rect = canvas.getBoundingClientRect();
         canvas.width = rect.width;
@@ -95,6 +102,10 @@
             }
         }
 
+        const cycleTime = (performance.now() * 0.0005) % 1;
+        const ringRadius = 30 - 20 * Math.pow(1 - cycleTime, 2);
+        const ringAlpha = Math.min(1, (1 - cycleTime) * 4);
+        const ringColor = setHexAlpha(COLORS.UPGRADE_COLOR, ringAlpha);
         for (const [id, node] of nodes) {
             const isObtained = State.save.obtainedUpgrades.includes(id);
             let allPrereqsSatisfied = true;
@@ -102,9 +113,24 @@
                 allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
             }
             ctx.beginPath();
-            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 20 : 10), 0, 2 * Math.PI);
+            ctx.arc(node.position.x, node.position.y, (isObtained ? 20 : allPrereqsSatisfied ? 15 : 10), 0, 2 * Math.PI);
             ctx.fillStyle = COLORS.UPGRADE_COLOR;
             ctx.fill();
+            if (!isObtained && allPrereqsSatisfied) {
+                // pulsing star effect for available but not yet obtained upgrades
+                ctx.beginPath();
+                ctx.arc(node.position.x, node.position.y, ringRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle = ringColor;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            } else if(isObtained) {
+                // constant ring effect for obtained upgrades
+                ctx.beginPath();
+                ctx.arc(node.position.x, node.position.y, 30, 0, 2 * Math.PI);
+                ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
         }
 
         ctx.restore();
