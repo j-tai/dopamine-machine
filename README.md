@@ -1,4 +1,30 @@
+# coinflipper
+
+Fly around, shoot polygons, and one day even prestige?? (when it's implemented)
+
+## Prepare dependencies
+
+`npm` still needs to be installed manually.
+
+```sh
+bash install_dependencies.sh
+```
+
+## Linting
+
+```sh
+pre-commit run --all-files
+```
+
+### Build and run locally
+
+```sh
+npm run dev
+```
+
 # sv
+
+TODO remove template stuff below here
 
 Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
 
