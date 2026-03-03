@@ -273,12 +273,17 @@
     }
 
     function onKey(event: KeyboardEvent) {
+        let deltaSplitPercent = 0;
         if (event.key === 'q' || event.key === 'Q') {
-            splitPercent = Math.max(10, splitPercent - 10);
+            deltaSplitPercent = -100;
         }
         if (event.key === 'e' || event.key === 'E') {
-            splitPercent = Math.min(90, splitPercent + 10);
+            deltaSplitPercent = 100;
         }
+        if(event.shiftKey) {
+            deltaSplitPercent *= 0.1;
+        }
+        splitPercent = Math.min(90, Math.max(10, splitPercent + deltaSplitPercent));
         if (event.key === '9') {
             // Debug functionality
             regenerateDependencyGraph(false);
@@ -306,6 +311,7 @@
         const dt = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
 
+        // Update physics and other objects
         updateAll(dt);
         render();
         requestAnimationFrame(runAnimationFrame);
@@ -339,5 +345,6 @@
     canvas {
         width: 100%;
         display: block;
+        transition: height 0.8s cubic-bezier(0.19,1.00,0.22,1.00);
     }
 </style>
