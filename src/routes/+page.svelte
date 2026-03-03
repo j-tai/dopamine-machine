@@ -337,6 +337,6 @@
     canvas {
         width: 100%;
         display: block;
-        transition: height 0.4s ease-in-out;
+        transition: height 0.4s ease-out;
     }
 </style>
