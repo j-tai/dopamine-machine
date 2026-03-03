@@ -120,8 +120,15 @@ export function selectNextAvailable(currentId?: number | null): number | null {
 
 /** Returns true if the provided polynomial cost can be paid by State.save.basicRankCurrency. */
 export function canAfford(cost: Polynomial): boolean {
-	for (let i = 0; i < cost.length; i++) {
-		if (polyGetAtIndex(State.save.basicRankCurrency, i) < polyGetAtIndex(cost, i)) return false;
+	// cost <= currency elementwise
+	return allElementsLe(cost, State.save.basicRankCurrency);
+}
+
+/** Pure math: returns true if for all indices i, a[i] <= b[i]. Missing indices are treated as 0. */
+export function allElementsLe(a: Polynomial, b: Polynomial): boolean {
+	const maxLen = Math.max(a.length, b.length);
+	for (let i = 0; i < maxLen; i++) {
+		if (polyGetAtIndex(a, i) > polyGetAtIndex(b, i)) return false;
 	}
 	return true;
 }
