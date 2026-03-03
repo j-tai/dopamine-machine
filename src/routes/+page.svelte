@@ -275,6 +275,9 @@
         if (event.key === 'e' || event.key === 'E') {
             deltaTargetSplitPercent = 100;
         }
+        if(event.shiftKey) {
+            deltaTargetSplitPercent *= 0.1;
+        }
         targetSplitPercent = Math.min(90, Math.max(10, targetSplitPercent + deltaTargetSplitPercent));
         if (event.key === '9') {
             // Debug functionality
