@@ -13,7 +13,7 @@ export type Polynomial = number[];
 export const POLY_ZERO: Polynomial = [];
 export const POLY_ONE: Polynomial = [1];
 
-export const UPGRADES_MAX_ADDED_EDGES = 8;
+export const UPGRADES_MAX_ADDED_EDGES = 20;
 
 /**
  * Global Visual Constants
@@ -722,8 +722,12 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 	const candidates: [number, number][] = [];
 	for (let i = 0; i < topoOrder.length; i++) {
 		// Chain-like algorithm biased to nearby nodes
-		const j = i + 1;
+		let j = i + 1;
 		if(j < topoOrder.length) {
+			candidates.push([topoOrder[i], topoOrder[j]]);
+		}
+		j += 1 + Math.floor(Math.random() * 3);
+		if (j < topoOrder.length) {
 			candidates.push([topoOrder[i], topoOrder[j]]);
 		}
 	}
@@ -961,7 +965,7 @@ const MAX_FORCE = 500;
 const MAX_VELOCITY = 400;
 const FIXED_DT = 1;
 
-export function updateUpgradePhysics(_deltaSeconds: number) {
+export function updateUpgradePhysicsTick(deltaSeconds: number) {
 	const nodes = Array.from(State.upgradeUINodes.entries());
 	if (nodes.length === 0) return;
 
@@ -1010,21 +1014,28 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 
 	// Integrate using velocity stored on the node
 	for (const [id, node] of nodes) {
-		node.velocity = node.velocity.add(forces.get(id)!.scale(FIXED_DT));
-		node.velocity = node.velocity.scale(1 / (1 + DAMPING * FIXED_DT));
+		node.velocity = node.velocity.add(forces.get(id)!.scale(deltaSeconds));
+		node.velocity = node.velocity.scale(1 / (1 + DAMPING * deltaSeconds));
 
 		const speed = node.velocity.length();
 		if (speed > MAX_VELOCITY) {
 			node.velocity = node.velocity.scale(MAX_VELOCITY / speed);
 		}
 
-		node.position = node.position.add(node.velocity.scale(FIXED_DT));
+		node.position = node.position.add(node.velocity.scale(deltaSeconds));
 	}
 
 	// Cache average position
 	State.upgradeUICenter = nodes
 		.reduce((sum, [, node]) => sum.add(node.position), Vec2.ZERO)
 		.scale(1 / nodes.length);
+}
+
+export function updateUpgradePhysics(_deltaSeconds: number) {
+	const NUM_ITERATIONS = 10;
+	for (let i = 0; i < NUM_ITERATIONS; i++) {
+		updateUpgradePhysicsTick(FIXED_DT);
+	}
 }
 
 export function updateAll(deltaSeconds: number) {
