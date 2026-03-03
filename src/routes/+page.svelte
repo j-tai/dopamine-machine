@@ -139,6 +139,18 @@
             }
         }
 
+        if(State.selectedUpgradeId != null) {
+            const selectedNode = State.upgradeUINodes.get(State.selectedUpgradeId);
+            if (selectedNode) {
+                // constant ring effect for selected upgrade
+                ctx.beginPath();
+                ctx.arc(selectedNode.position.x, selectedNode.position.y, 40 + Math.sin(cycleTime * Math.PI * 2) * 5, 0, 2 * Math.PI);
+                ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        }
+
         ctx.restore();
     }
 
