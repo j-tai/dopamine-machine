@@ -1,6 +1,5 @@
 import { gzip, ungzip } from 'pako';
 import Vec2 from '$lib/vec2';
-import Rect from '$lib/rect';
 import World from '$lib/world';
 import { Stats, type Upgrade } from '$lib/upgrades';
 import { getZoneRect, NUM_ZONES } from '$lib/zone';
@@ -35,9 +34,6 @@ export const PHYSICS = {
 	// Each zone is a tall strip
 	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
 	MAX_ENEMIES_PER_ZONE: 1000,
-	CAMERA_DRAG_RATE: 2,
-	CAMERA_SOFT_THRESHOLD: 100,
-	CAMERA_HARD_THRESHOLD: 300,
 };
 
 export function polyNormalizeInPlace(poly: Polynomial): void {
@@ -170,37 +166,6 @@ export function polyOneHot(index: number, value: number): Polynomial {
 	return result;
 }
 
-/**
- * Drags a vector toward a target position.
- *
- * @param current The current position of the object.
- * @param target The target position to drag toward.
- * @param dragFactor The factor by which to drag the object (0 = no drag, 1 = snap to target).
- * @param softThreshold The distance at which dragging starts to take effect. Closer than this threshold, the current vector is returned unchanged.
- * @param hardThreshold The resulting vector is guaranteed to be at most this many units away from the target.
- */
-export function dragVectorTowards(
-	current: Vec2,
-	target: Vec2,
-	dragFactor: number,
-	softThreshold: number,
-	hardThreshold: number,
-): Vec2 {
-	const toTarget = target.sub(current);
-	const toTargetLength = toTarget.length();
-	if (toTargetLength < softThreshold) {
-		return current; // within soft threshold, don't apply drag
-	}
-	if (toTargetLength > hardThreshold) {
-		return target.add(toTarget.normalize().scale(-hardThreshold)); // beyond hard threshold, clamp to hard threshold
-	}
-	dragFactor = Math.max(0, Math.min(1, dragFactor)); // clamp drag factor to [0, 1]
-	const dragAmount =
-		(toTargetLength * dragFactor * (toTargetLength - softThreshold)) /
-		(hardThreshold - softThreshold); // scale drag amount based on distance within thresholds
-	return current.add(toTarget.normalize().scale(dragAmount));
-}
-
 /** The singleton game state. */
 export const State = {
 	/** The data that is persisted to the save file. */
@@ -221,11 +186,6 @@ export const State = {
 	selectedUpgradeId: null as number | null,
 
 	canvasWidthHeight: new Vec2(800, 600),
-	/** The area of the world currently visible on screen, used for culling. Centered on the camera position. */
-	worldSpaceClip: Rect.fromCenterAndSize(Vec2.ZERO, new Vec2(800, 600)),
-	cameraScale: 2, // 1 world unit = this many screen pixels
-	targetCameraScale: 2,
-	cameraPosition: Vec2.ZERO,
 	screenMousePosition: Vec2.ZERO, // Mouse position in world scale but not shifted by camera
 	mousePosition: Vec2.ZERO, // World-space mouse position
 	upgradeDefinitions: new Map<number, Upgrade>(),
@@ -622,21 +582,6 @@ export function updatePhysics(delta: number) {
 	}
 }
 
-export function updateCamera(deltaSeconds: number) {
-	State.cameraPosition = dragVectorTowards(
-		State.cameraPosition,
-		State.world.player.position,
-		PHYSICS.CAMERA_DRAG_RATE * deltaSeconds,
-		PHYSICS.CAMERA_SOFT_THRESHOLD,
-		PHYSICS.CAMERA_HARD_THRESHOLD,
-	);
-	State.mousePosition = State.screenMousePosition.add(State.cameraPosition);
-	State.worldSpaceClip = Rect.fromCenterAndSize(
-		State.cameraPosition,
-		State.canvasWidthHeight.scale(1 / State.cameraScale),
-	);
-}
-
 const SPRING_LENGTH = 100;
 const SPRING_STRENGTH = 0.8;
 const REPULSION = 8000;
@@ -720,12 +665,7 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 
 export function updateAll(dt: number) {
 	dt = Math.min(1.0, Math.max(1e-9, dt)); // clamp to a sane but permissive range
-	const CAMERA_SCALE_LERP_RATE = 0.1;
-	State.targetCameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
-	State.cameraScale +=
-		(State.targetCameraScale - State.cameraScale) * Math.min(1, dt * CAMERA_SCALE_LERP_RATE); // smooth camera zoom
 	regenerateDependencyGraph(true);
-	updateCamera(dt);
 	updatePhysics(Math.min(dt, 0.1));
 	updateUpgradePhysics(dt);
 	if (State.save.latch % 100 === 0) {

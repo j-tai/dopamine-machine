@@ -6,7 +6,7 @@ export default class Grid extends Entity {
 		super(Vec2.ZERO);
 	}
 
-	render({ ctx, visibleArea }: RenderParams): void {
+	render({ ctx, camera: { visibleArea } }: RenderParams): void {
 		ctx.strokeStyle = COLOR;
 		ctx.lineWidth = 1;
 		ctx.lineCap = 'round';

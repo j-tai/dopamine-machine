@@ -1,10 +1,11 @@
 import Player from '$lib/entity/player';
 import type BasicEnemy from '$lib/entity/basicEnemy';
 import type Bullet from '$lib/entity/bullet';
-import Entity, { type RenderParams, type TickParams } from '$lib/entity';
+import Entity, { type TickParams } from '$lib/entity';
 import type { State } from '$lib/models';
 import Grid from '$lib/entity/grid';
 import Crosshair from '$lib/entity/crosshair';
+import Camera from '$lib/camera.js';
 
 /** Holds all entities. */
 export default class World {
@@ -13,6 +14,8 @@ export default class World {
 	player = new Player();
 	enemies: BasicEnemy[] = [];
 	bullets: Bullet[] = [];
+
+	camera = new Camera();
 
 	/** Deletes all dead entities. */
 	prune(state: State): void {
@@ -37,6 +40,11 @@ export default class World {
 
 	/** Ticks all entities. */
 	tick(dt: number, state: State): void {
+		this.camera.targetPosition = this.player.position;
+		this.camera.targetScale = 2 / (1 + 0.1 * state.save.obtainedUpgrades.length); // zoom out as you get more upgrades
+		this.camera.tick(dt, state.canvasWidthHeight);
+		state.mousePosition = this.camera.screenToWorldCoordinates(state.screenMousePosition);
+
 		const params: TickParams = {
 			world: this,
 			state,
@@ -48,13 +56,14 @@ export default class World {
 		}
 	}
 
-	/** Renders all entities. */
-	render(params: RenderParams): void {
+	/** Renders the world. */
+	render(ctx: CanvasRenderingContext2D): void {
+		this.camera.setup(ctx);
 		for (const e of this.getAllEntities()) {
 			if (e.isVisible()) {
-				params.ctx.save();
-				e.render(params);
-				params.ctx.restore();
+				ctx.save();
+				e.render({ ctx, camera: this.camera });
+				ctx.restore();
 			}
 		}
 	}

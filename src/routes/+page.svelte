@@ -73,12 +73,8 @@
         // Set up camera (Center of screen, +Y up)
         ctx.resetTransform();
         ctx.translate(bottomCanvas.width * 0.5, bottomCanvas.height * 0.5);
-        ctx.scale(State.cameraScale, -State.cameraScale);
-        ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
-        State.world.render({ ctx, cameraScale: State.cameraScale,
-        cameraPosition: State.cameraPosition,
-        visibleArea: State.worldSpaceClip});
+        State.world.render(ctx);
         ctx.resetTransform();
         drawWallet(ctx);
     }
@@ -244,10 +240,6 @@
         // Position relative to the center of bottomCanvas
         let worldX = event.clientX - (rect.left + rect.width / 2);
         let worldY = event.clientY - (rect.top + rect.height / 2);
-
-        // Adjust for camera scale and inverted Y axis
-        worldX /= State.cameraScale;
-        worldY /= -State.cameraScale;
 
         State.screenMousePosition = new Vec2(worldX, worldY);
     }

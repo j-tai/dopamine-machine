@@ -1,7 +1,7 @@
 import type Vec2 from '$lib/vec2';
 import type World from '$lib/world';
 import type { State } from '$lib/models';
-import type Rect from '$lib/rect.ts';
+import type Camera from '$lib/camera.ts';
 
 export default abstract class Entity {
 	protected constructor(public position: Vec2) {}
@@ -29,10 +29,8 @@ export default abstract class Entity {
 export interface RenderParams {
 	/** The canvas context to render to */
 	ctx: CanvasRenderingContext2D;
-	cameraScale: number;
-	cameraPosition: Vec2;
-	/** The area of the world currently visible on screen, used for culling */
-	visibleArea: Rect;
+	/** Reference to the camera settings */
+	camera: Readonly<Camera>;
 }
 
 export interface TickParams {

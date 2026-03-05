@@ -6,10 +6,10 @@ export default class Crosshair extends Entity {
 		super(Vec2.ZERO);
 	}
 
-	render({ ctx, cameraScale }: RenderParams): void {
+	render({ ctx, camera }: RenderParams): void {
 		ctx.translate(this.position.x, this.position.y);
 		ctx.strokeStyle = COLOR;
-		ctx.lineWidth = 4 / cameraScale; // Keep lines thin regardless of scale
+		ctx.lineWidth = 4 / camera.scale; // Keep lines thin regardless of scale
 
 		ctx.beginPath();
 		// Horizontal line
