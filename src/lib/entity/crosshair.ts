@@ -1,16 +1,15 @@
-import Entity, { type TickParams } from '$lib/entity';
+import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import Vec2 from '$lib/vec2';
-import { State } from '$lib/models';
 
 export default class Crosshair extends Entity {
 	constructor() {
 		super(Vec2.ZERO);
 	}
 
-	render(ctx: CanvasRenderingContext2D): void {
+	render({ ctx, cameraScale }: RenderParams): void {
 		ctx.translate(this.position.x, this.position.y);
 		ctx.strokeStyle = COLOR;
-		ctx.lineWidth = 4 / State.cameraScale; // Keep lines thin regardless of scale
+		ctx.lineWidth = 4 / cameraScale; // Keep lines thin regardless of scale
 
 		ctx.beginPath();
 		// Horizontal line

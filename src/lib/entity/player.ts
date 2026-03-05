@@ -1,4 +1,4 @@
-import Entity, { type TickParams } from '$lib/entity';
+import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import Vec2 from '$lib/vec2';
 import Rect from '$lib/rect';
 import { getZoneRect } from '$lib/zone';
@@ -15,7 +15,7 @@ export default class Player extends Entity {
 		super(Vec2.ZERO);
 	}
 
-	render(ctx: CanvasRenderingContext2D): void {
+	render({ ctx }: RenderParams): void {
 		ctx.translate(this.position.x, this.position.y);
 		ctx.rotate(this.facing.angle());
 

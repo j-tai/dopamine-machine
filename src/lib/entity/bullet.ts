@@ -1,4 +1,4 @@
-import Entity, { type TickParams } from '$lib/entity';
+import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import type Vec2 from '$lib/vec2';
 
 export default class Bullet extends Entity {
@@ -9,6 +9,22 @@ export default class Bullet extends Entity {
 		public readonly velocity: Vec2,
 	) {
 		super(position);
+	}
+
+	render({ ctx }: RenderParams): void {
+		ctx.strokeStyle = COLOR;
+		ctx.lineWidth = 2;
+		ctx.lineCap = 'round';
+
+		const tracerLength = 0.05 * Math.min(0.5, this.lifetime); // seconds of length
+		const tracerDelta = this.velocity.scale(tracerLength);
+		const tail = this.position.sub(tracerDelta);
+		const head = this.position.add(tracerDelta);
+
+		ctx.beginPath();
+		ctx.moveTo(head.x, head.y);
+		ctx.lineTo(tail.x, tail.y);
+		ctx.stroke();
 	}
 
 	tick({ dt, world }: TickParams): void {
@@ -33,22 +49,6 @@ export default class Bullet extends Entity {
 		// update fields
 		this.position = newPosition;
 		this.lifetime -= dt;
-	}
-
-	render(ctx: CanvasRenderingContext2D): void {
-		ctx.strokeStyle = COLOR;
-		ctx.lineWidth = 2;
-		ctx.lineCap = 'round';
-
-		const tracerLength = 0.05 * Math.min(0.5, this.lifetime); // seconds of length
-		const tracerDelta = this.velocity.scale(tracerLength);
-		const tail = this.position.sub(tracerDelta);
-		const head = this.position.add(tracerDelta);
-
-		ctx.beginPath();
-		ctx.moveTo(head.x, head.y);
-		ctx.lineTo(tail.x, tail.y);
-		ctx.stroke();
 	}
 
 	shouldDelete(): boolean {

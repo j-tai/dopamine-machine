@@ -1,7 +1,7 @@
 import Player from '$lib/entity/player';
 import type BasicEnemy from '$lib/entity/basicEnemy';
 import type Bullet from '$lib/entity/bullet';
-import Entity, { type TickParams } from '$lib/entity';
+import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import type { State } from '$lib/models';
 import Grid from '$lib/entity/grid';
 import Crosshair from '$lib/entity/crosshair';
@@ -49,12 +49,12 @@ export default class World {
 	}
 
 	/** Renders all entities. */
-	render(ctx: CanvasRenderingContext2D): void {
+	render(params: RenderParams): void {
 		for (const e of this.getAllEntities()) {
 			if (e.isVisible()) {
-				ctx.save();
-				e.render(ctx);
-				ctx.restore();
+				params.ctx.save();
+				e.render(params);
+				params.ctx.restore();
 			}
 		}
 	}

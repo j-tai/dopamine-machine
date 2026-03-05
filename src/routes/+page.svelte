@@ -76,7 +76,9 @@
         ctx.scale(State.cameraScale, -State.cameraScale);
         ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
-        State.world.render(ctx);
+        State.world.render({ ctx, cameraScale: State.cameraScale,
+        cameraPosition: State.cameraPosition,
+        visibleArea: State.worldSpaceClip});
         ctx.resetTransform();
         drawWallet(ctx);
     }

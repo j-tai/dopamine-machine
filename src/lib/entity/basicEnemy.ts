@@ -1,4 +1,4 @@
-import Entity, { type TickParams } from '$lib/entity';
+import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import Vec2 from '$lib/vec2';
 import type World from '$lib/world';
 import { polyAdd, polyOneHot, type State } from '$lib/models';
@@ -22,7 +22,7 @@ export default class BasicEnemy extends Entity {
 		this.health = this.maxHealth;
 	}
 
-	render(ctx: CanvasRenderingContext2D): void {
+	render({ ctx }: RenderParams): void {
 		ctx.translate(this.position.x, this.position.y);
 		ctx.lineWidth = 2;
 		ctx.lineCap = 'round';
