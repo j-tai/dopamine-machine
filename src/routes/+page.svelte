@@ -21,9 +21,17 @@
     let splitPercent = 10;
     // Local UI selection mirror (keep State.selectedUpgradeId in sync)
     let selectedUpgradeId: number | null = State.selectedUpgradeId;
+    let selectedUpgradeCursor: Vec2 = new Vec2(0, 0);
     // bump to force reactive recomputations when the underlying State changes outside Svelte reactivity
     let uiVersion = 0;
     function bumpUI() { uiVersion++; }
+
+    function setHexAlpha(hexColor: string, alpha: number): string {
+        const r = parseInt(hexColor.slice(1, 3), 16);
+        const g = parseInt(hexColor.slice(3, 5), 16);
+        const b = parseInt(hexColor.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
 
     function resizeCanvas(canvas: HTMLCanvasElement) {
         const rect = canvas.getBoundingClientRect();
@@ -85,6 +93,7 @@
         ctx.translate(topCanvas.width * 0.5, topCanvas.height * 0.5);
         ctx.translate(-State.upgradeUICenter.x, -State.upgradeUICenter.y);
 
+        const cycleTime = (performance.now() * 0.0005) % 1;
         for (const [id, node] of nodes) {
             for (const childId of State.save.dependencyGraph.get(id) ?? []) {
                 const childNode = State.upgradeUINodes.get(childId)!;
@@ -92,9 +101,18 @@
                 ctx.moveTo(node.position.x, node.position.y);
                 ctx.lineTo(childNode.position.x, childNode.position.y);
                 ctx.stroke();
+                // draw a small packet from parent to child to indicate direction
+                const interpolatedPos = node.position.add(childNode.position.sub(node.position).scale(cycleTime));
+                ctx.beginPath();
+                ctx.arc(interpolatedPos.x, interpolatedPos.y, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = COLORS.UPGRADE_COLOR;
+                ctx.fill();
             }
         }
 
+        const ringRadius = 30 - 20 * Math.pow(1 - cycleTime, 2);
+        const ringAlpha = Math.min(1, (1 - cycleTime) * 4);
+        const ringColor = setHexAlpha(COLORS.UPGRADE_COLOR, ringAlpha);
         for (const [id, node] of nodes) {
             const isObtained = State.save.obtainedUpgrades.includes(id);
             let allPrereqsSatisfied = true;
@@ -102,9 +120,38 @@
                 allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
             }
             ctx.beginPath();
-            ctx.arc(node.position.x, node.position.y, (isObtained ? 40 : allPrereqsSatisfied ? 20 : 10), 0, 2 * Math.PI);
+            ctx.arc(node.position.x, node.position.y, (isObtained ? 20 : allPrereqsSatisfied ? 15 : 10), 0, 2 * Math.PI);
             ctx.fillStyle = COLORS.UPGRADE_COLOR;
             ctx.fill();
+            if (!isObtained && allPrereqsSatisfied) {
+                // pulsing star effect for available but not yet obtained upgrades
+                ctx.beginPath();
+                ctx.arc(node.position.x, node.position.y, ringRadius, 0, 2 * Math.PI);
+                ctx.strokeStyle = ringColor;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            } else if(isObtained) {
+                // constant ring effect for obtained upgrades
+                ctx.beginPath();
+                ctx.arc(node.position.x, node.position.y, 30, 0, 2 * Math.PI);
+                ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
+        }
+
+        if(selectedUpgradeId != null) {
+            const selectedNode = State.upgradeUINodes.get(selectedUpgradeId);
+            if (selectedNode) {
+                // move cursor toward selected upgrade
+                selectedUpgradeCursor = selectedUpgradeCursor.add(selectedNode.position.sub(selectedUpgradeCursor).scale(0.1));
+                // constant ring effect for selected upgrade
+                ctx.beginPath();
+                ctx.arc(selectedUpgradeCursor.x, selectedUpgradeCursor.y, 40 + Math.sin(cycleTime * Math.PI * 2) * 5, 0, 2 * Math.PI);
+                ctx.strokeStyle = COLORS.UPGRADE_COLOR;
+                ctx.lineWidth = 4;
+                ctx.stroke();
+            }
         }
 
         ctx.restore();
