@@ -1,22 +1,22 @@
 <script lang="ts">
     import {
-        State,
-        COLORS,
-        updateAll,
-        PHYSICS,
-        regenerateDependencyGraph,
-        getAvailableUpgrades,
-        selectNextAvailable,
         canAfford,
-        purchaseUpgrade,
+        COLORS,
         formatCost,
+        purchaseUpgrade,
+        regenerateDependencyGraph,
+        selectNextAvailable,
+        State,
+        updateAll,
     } from "$lib/models";
     import {onMount} from "svelte";
     import Vec2 from "$lib/vec2";
+    import {ENEMY_COLOR_BY_RANK} from "$lib/entity/basicEnemy";
 
     let bottomCanvas: HTMLCanvasElement;
     let topCanvas: HTMLCanvasElement;
 
+    /** Mouse position in canvas coordinates */
     let lastTime = 0;
     let splitPercent = 10;
     // Local UI selection mirror (keep State.selectedUpgradeId in sync)
@@ -24,7 +24,10 @@
     let selectedUpgradeCursor: Vec2 = new Vec2(0, 0);
     // bump to force reactive recomputations when the underlying State changes outside Svelte reactivity
     let uiVersion = 0;
-    function bumpUI() { uiVersion++; }
+
+    function bumpUI() {
+        uiVersion++;
+    }
 
     function setHexAlpha(hexColor: string, alpha: number): string {
         const r = parseInt(hexColor.slice(1, 3), 16);
@@ -73,11 +76,7 @@
         ctx.scale(State.cameraScale, -State.cameraScale);
         ctx.translate(-State.cameraPosition.x, -State.cameraPosition.y);
 
-        drawGrid(ctx);
-        drawBullets(ctx);
-        drawEnemies(ctx);
-        drawPlayer(ctx);
-        drawCrosshair(ctx);
+        State.world.render(ctx);
         ctx.resetTransform();
         drawWallet(ctx);
     }
@@ -130,7 +129,7 @@
                 ctx.strokeStyle = ringColor;
                 ctx.lineWidth = 4;
                 ctx.stroke();
-            } else if(isObtained) {
+            } else if (isObtained) {
                 // constant ring effect for obtained upgrades
                 ctx.beginPath();
                 ctx.arc(node.position.x, node.position.y, 30, 0, 2 * Math.PI);
@@ -140,7 +139,7 @@
             }
         }
 
-        if(selectedUpgradeId != null) {
+        if (selectedUpgradeId != null) {
             const selectedNode = State.upgradeUINodes.get(selectedUpgradeId);
             if (selectedNode) {
                 // move cursor toward selected upgrade
@@ -179,11 +178,11 @@
                 pointer = pointer.rotate(polygonAngle);
             }
             ctx.closePath();
-            ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[rank];
+            ctx.fillStyle = ENEMY_COLOR_BY_RANK[rank];
             ctx.fill();
 
             // Draw amount text
-            ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[rank];
+            ctx.fillStyle = ENEMY_COLOR_BY_RANK[rank];
             ctx.font = '24px monospace';
             ctx.textBaseline = 'middle';
             ctx.textAlign = 'left';
@@ -191,142 +190,6 @@
 
             ctx.restore();
         });
-    }
-
-    function drawGrid(ctx: CanvasRenderingContext2D) {
-        ctx.save();
-        ctx.strokeStyle = COLORS.GRID;
-        ctx.lineWidth = 1;
-        ctx.lineCap = 'round';
-
-        const MARGIN = 2;
-        const GRID_SPACING = 200;
-        const worldBounds = State.worldSpaceClip;
-
-        let pointer = Math.floor((worldBounds.minX - MARGIN) / GRID_SPACING) * GRID_SPACING;
-
-        while (pointer <= worldBounds.maxX + MARGIN) {
-            ctx.beginPath();
-            ctx.moveTo(pointer, worldBounds.minY);
-            ctx.lineTo(pointer, worldBounds.maxY);
-            ctx.stroke();
-            pointer += GRID_SPACING;
-        }
-
-        pointer = Math.floor((worldBounds.minY - MARGIN) / GRID_SPACING) * GRID_SPACING;
-
-        while (pointer <= worldBounds.maxY + MARGIN) {
-            ctx.beginPath();
-            ctx.moveTo(worldBounds.minX, pointer);
-            ctx.lineTo(worldBounds.maxX, pointer);
-            ctx.stroke();
-            pointer += GRID_SPACING;
-        }
-
-        ctx.restore();
-    }
-
-    function drawCrosshair(ctx: CanvasRenderingContext2D) {
-        const {x, y} = State.mousePosition;
-        const size = 4; // Half-length of the crosshair lines
-
-        ctx.save();
-        ctx.translate(x, y);
-
-        ctx.strokeStyle = COLORS.CROSSHAIR;
-        ctx.lineWidth = 4 / State.cameraScale; // Keep lines thin regardless of scale
-
-        ctx.beginPath();
-        // Horizontal line
-        ctx.moveTo(-size, 0);
-        ctx.lineTo(size, 0);
-        // Vertical line
-        ctx.moveTo(0, -size);
-        ctx.lineTo(0, size);
-        ctx.stroke();
-
-        ctx.restore();
-    }
-
-    function drawBullets(ctx: CanvasRenderingContext2D) {
-        ctx.save();
-        ctx.strokeStyle = COLORS.PLAYER_BULLET;
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-
-        for (const bullet of State.playerBullets) {
-            const tracerLength = 0.05 * Math.min(0.5, bullet.lifetime); // seconds of length
-            const tracerDelta = bullet.velocity.scale(tracerLength);
-            const tail = bullet.position.sub(tracerDelta);
-            const head = bullet.position.add(tracerDelta)
-
-            ctx.beginPath();
-            ctx.moveTo(head.x, head.y);
-            ctx.lineTo(tail.x, tail.y);
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    function drawEnemies(ctx: CanvasRenderingContext2D) {
-        for (const enemy of State.basicEnemies) {
-            if (!enemy.isVisible) {
-                continue;
-            }
-            ctx.save();
-            ctx.translate(enemy.position.x, enemy.position.y);
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = ctx.fillStyle = COLORS.ENEMY_COLOR_BY_RANK[enemy.rank];
-            const polygonN = 3 + enemy.rank;
-            const polygonAngle = Math.PI * 2 / polygonN;
-            const vertexRadius = PHYSICS.BASIC_ENEMY_RADIUS / Math.cos(Math.PI / polygonN);
-            const innerVertexRadius = vertexRadius * Math.max(0, enemy.currentHealth) / enemy.maxHealth;
-
-            let pointer = enemy.facingDirection.scale(vertexRadius);
-            ctx.beginPath();
-            ctx.moveTo(pointer.x, pointer.y);
-            for (let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
-                pointer = pointer.rotate(polygonAngle);
-                ctx.lineTo(pointer.x, pointer.y);
-            }
-            ctx.closePath();
-            ctx.stroke();
-
-            pointer = enemy.facingDirection.scale(innerVertexRadius);
-            ctx.beginPath();
-            ctx.moveTo(pointer.x, pointer.y);
-            for (let vertexIndex = 1; vertexIndex < polygonN; vertexIndex++) {
-                pointer = pointer.rotate(polygonAngle);
-                ctx.lineTo(pointer.x, pointer.y);
-            }
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
-    }
-
-    function drawPlayer(ctx: CanvasRenderingContext2D) {
-        const {x, y} = State.playerPosition;
-        const angle = Math.atan2(State.facingDirection.y, State.facingDirection.x);
-
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(angle);
-
-        // Draw concave arrow polygon
-        // Points: Tip, Right Wing, Inner Notch, Left Wing
-        ctx.beginPath();
-        ctx.moveTo(10, 0);       // Tip
-        ctx.lineTo(-8, 8);       // Top-back wing
-        ctx.lineTo(-4, 0);       // Inner concave notch
-        ctx.lineTo(-8, -8);      // Bottom-back wing
-        ctx.closePath();
-
-        ctx.fillStyle = COLORS.PLAYER;
-        ctx.fill();
-
-        ctx.restore();
     }
 
     function onKey(event: KeyboardEvent) {
@@ -363,7 +226,7 @@
         if (event.key === 'e' || event.key === 'E') {
             deltaSplitPercent = 100;
         }
-        if(event.shiftKey) {
+        if (event.shiftKey) {
             deltaSplitPercent *= 0.1;
         }
         splitPercent = Math.min(90, Math.max(10, splitPercent + deltaSplitPercent));
@@ -457,9 +320,13 @@
         <div class="upgrade-costs">
             {#each costItems as item}
                 <div class="cost-item">
-                    <svg class="poly-icon" width="28" height="28" viewBox="-16 -16 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                    <svg class="poly-icon" width="28" height="28"
+                         viewBox="-16 -16 32 32"
+                         xmlns="http://www.w3.org/2000/svg" aria-hidden={true}>
                         <g transform="scale(1,-1)">
-                            <polygon points={svgPolygonPoints(item.rank + 3, 12)} fill={COLORS.ENEMY_COLOR_BY_RANK[item.rank]}/>
+                            <polygon
+                                    points={svgPolygonPoints(item.rank + 3, 12)}
+                                    fill={ENEMY_COLOR_BY_RANK[item.rank]}/>
                         </g>
                     </svg>
                     <div class="cost-amt">{item.amount}</div>
@@ -492,7 +359,7 @@
     canvas {
         width: 100%;
         display: block;
-        transition: height 0.8s cubic-bezier(0.19,1.00,0.22,1.00);
+        transition: height 0.8s cubic-bezier(0.19, 1.00, 0.22, 1.00);
     }
 
     /* Upgrade panel (top-right) */
@@ -521,13 +388,38 @@
         margin-bottom: 8px;
     }
 
-    .upgrade-costs { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
-    .cost-item { display:flex; gap:6px; align-items:center; }
-    .poly-icon { display:block; }
-    .cost-amt { font-size: 13px; }
+    .upgrade-costs {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+    }
 
-    .purchase-hint { font-size: 13px; opacity: 0.95; }
-    .purchase-hint.disabled { opacity: 0.45; }
+    .cost-item {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+    }
 
-    .no-selection { color: #ddd; font-size: 13px; }
+    .poly-icon {
+        display: block;
+    }
+
+    .cost-amt {
+        font-size: 13px;
+    }
+
+    .purchase-hint {
+        font-size: 13px;
+        opacity: 0.95;
+    }
+
+    .purchase-hint.disabled {
+        opacity: 0.45;
+    }
+
+    .no-selection {
+        color: #ddd;
+        font-size: 13px;
+    }
 </style>
