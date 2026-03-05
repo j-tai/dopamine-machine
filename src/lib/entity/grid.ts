@@ -35,7 +35,7 @@ export default class Grid extends Entity {
 		}
 	}
 
-	tick(_params: TickParams): void {}
+	tick(): void {}
 }
 
 const COLOR = '#602424ff';

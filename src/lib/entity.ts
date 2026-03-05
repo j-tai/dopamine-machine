@@ -23,7 +23,7 @@ export default abstract class Entity {
 	}
 
 	/** Called immediately after the entity is deleted. */
-	onDelete(_params: { world: World; state: State }): void {}
+	onDelete(_: { world: World; state: State }): void {}
 }
 
 export interface RenderParams {
