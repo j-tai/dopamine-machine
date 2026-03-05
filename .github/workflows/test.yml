@@ -1,0 +1,34 @@
+name: npm run test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out the repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js environment
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # You can change this to '18' or 'lts/*' as needed
+          cache: 'npm'       # Caches npm dependencies for faster subsequent runs
+
+      # 3. Ensure the bash script is executable and run it
+      # This replicates your 'bash install_dependencies.sh' step
+      - name: Install system/custom dependencies
+        run: |
+          chmod +x install_dependencies.sh
+          ./install_dependencies.sh
+
+      # 4. Run the npm test command
+      - name: Run tests
+        run: npm run test
