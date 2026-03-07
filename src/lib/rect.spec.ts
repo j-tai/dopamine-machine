@@ -134,4 +134,46 @@ describe('Rect', () => {
 		// Original should be unchanged (immutability)
 		expect(rect).toEqual(new Rect(0, 10, 0, 20));
 	});
+
+	test('grow (Vec2 parameter)', () => {
+		const rect = new Rect(0, 10, 0, 20);
+		const grownRect = rect.grow(new Vec2(4, 6));
+
+		expect(grownRect.center).toEqual(rect.center); // Center should remain the same
+		expect(grownRect.size).toEqual(new Vec2(14, 26));
+		expect(grownRect).toEqual(new Rect(-2, 12, -3, 23));
+
+		// Grow by zero
+		const rect2 = new Rect(5, 15, 10, 30);
+		const grownRect2 = rect2.grow(new Vec2(0, 0));
+		expect(grownRect2).toEqual(rect2);
+
+		// Grow by negative (shrink)
+		const rect3 = new Rect(0, 10, 0, 20);
+		const shrunkRect = rect3.grow(new Vec2(-4, -10));
+		expect(shrunkRect.center).toEqual(rect3.center);
+		expect(shrunkRect.size).toEqual(new Vec2(6, 10));
+		expect(shrunkRect).toEqual(new Rect(2, 8, 5, 15));
+	});
+
+	test('grow (number parameter)', () => {
+		const rect = new Rect(0, 10, 0, 20);
+		const grownRect = rect.grow(4);
+
+		expect(grownRect.center).toEqual(rect.center); // Center should remain the same
+		expect(grownRect.size).toEqual(new Vec2(14, 24));
+		expect(grownRect).toEqual(new Rect(-2, 12, -2, 22));
+
+		// Grow by zero
+		const rect2 = new Rect(5, 15, 10, 30);
+		const grownRect2 = rect2.grow(0);
+		expect(grownRect2).toEqual(rect2);
+
+		// Grow by negative (shrink)
+		const rect3 = new Rect(0, 10, 0, 20);
+		const shrunkRect = rect3.grow(-2);
+		expect(shrunkRect.center).toEqual(rect3.center);
+		expect(shrunkRect.size).toEqual(new Vec2(8, 18));
+		expect(shrunkRect).toEqual(new Rect(1, 9, 1, 19));
+	});
 });
