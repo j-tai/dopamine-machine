@@ -1,10 +1,10 @@
-import { gzip, ungzip } from 'pako';
 import Vec2 from '$lib/vec2';
 import World from '$lib/world';
 import { Stats, type Upgrade } from '$lib/upgrades';
 import { getZoneRect, NUM_ZONES } from '$lib/zone';
 import BasicEnemy from '$lib/entity/basicEnemy';
 import Polynomial from '$lib/polynomial';
+import { marshalToBase64, unmarshalFromBase64 } from '$lib/save';
 
 export type AdjacencyMap = Map<number, number[]>;
 
@@ -37,7 +37,7 @@ export function getUpgradeDef(id: number) {
 
 /** Returns true if all prereqs for this upgrade id are satisfied (or there are none). */
 export function isPrereqsSatisfied(id: number): boolean {
-	const prereqs = State.save.dependencyGraph.get(id) ?? [];
+	const prereqs = State.save.dependencyGraph[id] ?? [];
 	return prereqs.every((p) => State.save.obtainedUpgrades.includes(p));
 }
 
@@ -100,7 +100,7 @@ export const State = {
 		/** how much of each currency you own */
 		basicRankCurrency: Polynomial.ZERO,
 		/** backwards edges (aka all prerequisites) for each upgrade, used to determine which upgrades are available to purchase */
-		dependencyGraph: new Map<number, number[]>(),
+		dependencyGraph: {} as Record<number, number[]>,
 		/** ids of obtained upgrades */
 		obtainedUpgrades: [] as number[],
 	},
@@ -121,49 +121,11 @@ export const State = {
 	upgradeUICenter: Vec2.ZERO, // average position of all upgrade nodes, used to center UI
 };
 export type State = typeof State;
-type SaveDataType = typeof State.save;
-
-const MAP_PREFIX = '__Map__';
-
-function replacer(_key: string, value: unknown) {
-	if (value instanceof Map) {
-		return { [MAP_PREFIX]: Array.from(value.entries()) };
-	}
-	return value;
-}
-
-function reviver(_key: string, value: unknown) {
-	if (typeof value === 'object' && value !== null && MAP_PREFIX in value) {
-		const record = value as Record<string, unknown>;
-		const entries = record[MAP_PREFIX];
-		return new Map(entries as Iterable<readonly [unknown, unknown]>);
-	}
-	return value;
-}
-
-export function marshalSaveToBytes(saveData: SaveDataType): Uint8Array {
-	const jsonString = JSON.stringify(saveData, replacer);
-	return gzip(new TextEncoder().encode(jsonString));
-}
-
-export function unmarshalSaveFromBytes(bytes: Uint8Array): SaveDataType {
-	const jsonString = ungzip(bytes, { to: 'string' });
-	return JSON.parse(jsonString, reviver);
-}
-
-function uint8ToBase64(bytes: Uint8Array): string {
-	let binary = '';
-	for (let i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i]);
-	}
-	return btoa(binary);
-}
+export type SaveDataType = typeof State.save;
 
 export function save(): void {
-	const currentSave = State.save;
-	const currentSaveBytes = marshalSaveToBytes(currentSave);
-	const currentSaveBytesBase64 = uint8ToBase64(currentSaveBytes);
-	localStorage.setItem('saveData', currentSaveBytesBase64);
+	const base64 = marshalToBase64(State.save);
+	localStorage.setItem('saveData', base64);
 }
 
 export function autoSaveLoad(): void {
@@ -175,14 +137,9 @@ export function autoSaveLoad(): void {
 		return;
 	}
 
-	const loadedSaveBytes = new Uint8Array(
-		atob(storedSaveBytesBase64)
-			.split('')
-			.map((c) => c.charCodeAt(0)),
-	);
-	const loadedSave = unmarshalSaveFromBytes(loadedSaveBytes);
+	const loadedSave = unmarshalFromBase64(storedSaveBytesBase64);
 
-	if (loadedSave.latch > currentSave.latch) {
+	if (loadedSave && loadedSave.latch > currentSave.latch) {
 		State.save = loadedSave;
 		reapplyAllUpgrades();
 	} else {
@@ -396,7 +353,7 @@ export function regenerateUpgradeDefinitions(): void {
 
 export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 	regenerateUpgradeDefinitions();
-	if (firstTimeOnly && State.save.dependencyGraph.size > 0) {
+	if (firstTimeOnly && Object.keys(State.save.dependencyGraph).length > 0) {
 		return;
 	}
 	// 1. Get a list of all upgrade IDs
@@ -474,10 +431,15 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 		for (const v of [...graph.get(u)!]) if (canReachWithout(u, v)) graph.get(u)!.delete(v);
 
 	// 6. Invert to get dependent -> prereqs map
-	const dependencyGraph = new Map<number, number[]>();
-	for (const id of topoOrder) dependencyGraph.set(id, []);
-	for (const [prereq, dependents] of graph)
-		for (const dep of dependents) dependencyGraph.get(dep)!.push(prereq);
+	const dependencyGraph = {} as Record<number, number[]>;
+	for (const id of topoOrder) {
+		dependencyGraph[id] = [];
+	}
+	for (const [prereq, dependents] of graph) {
+		for (const dep of dependents) {
+			dependencyGraph[dep].push(prereq);
+		}
+	}
 
 	State.save.dependencyGraph = dependencyGraph;
 }
@@ -526,7 +488,7 @@ export function updateUpgradePhysicsTick(deltaSeconds: number) {
 
 	// Spring attraction along edges (both directions)
 	for (const [id, node] of nodes) {
-		for (const childId of State.save.dependencyGraph.get(id) ?? []) {
+		for (const childId of State.save.dependencyGraph[id] ?? []) {
 			const childNode = State.upgradeUINodes.get(childId);
 			if (!childNode) continue;
 

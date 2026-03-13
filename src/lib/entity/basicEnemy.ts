@@ -1,8 +1,9 @@
 import Entity, { type RenderParams, type TickParams } from '$lib/entity';
 import Vec2 from '$lib/vec2';
 import type World from '$lib/world';
-import { polyAdd, polyOneHot, type State } from '$lib/models';
+import type { State } from '$lib/models';
 import { getZoneRect } from '$lib/zone';
+import Polynomial from '$lib/polynomial';
 
 export default class BasicEnemy extends Entity {
 	facing = Vec2.fromAngle(Math.random() * 2 * Math.PI);
@@ -95,9 +96,8 @@ export default class BasicEnemy extends Entity {
 	onDelete({ state }: { world: World; state: State }) {
 		if (this.health <= 0) {
 			// Grant currency based on enemy rank
-			state.save.basicRankCurrency = polyAdd(
-				state.save.basicRankCurrency,
-				polyOneHot(this.rank, CURRENCY_SCALE),
+			state.save.basicRankCurrency = state.save.basicRankCurrency.add(
+				Polynomial.fromTerm(this.rank, CURRENCY_SCALE),
 			);
 		}
 	}
