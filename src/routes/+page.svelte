@@ -92,7 +92,7 @@
 
         const cycleTime = (performance.now() * 0.0005) % 1;
         for (const [id, node] of nodes) {
-            for (const childId of State.save.dependencyGraph.get(id) ?? []) {
+            for (const childId of State.save.dependencyGraph[id] ?? []) {
                 const childNode = State.upgradeUINodes.get(childId)!;
                 ctx.beginPath();
                 ctx.moveTo(node.position.x, node.position.y);
@@ -113,7 +113,7 @@
         for (const [id, node] of nodes) {
             const isObtained = State.save.obtainedUpgrades.includes(id);
             let allPrereqsSatisfied = true;
-            for (const childId of State.save.dependencyGraph.get(id) ?? []) {
+            for (const childId of State.save.dependencyGraph[id] ?? []) {
                 allPrereqsSatisfied = allPrereqsSatisfied && State.save.obtainedUpgrades.includes(childId);
             }
             ctx.beginPath();
@@ -156,7 +156,7 @@
 
     function drawWallet(ctx: CanvasRenderingContext2D) {
         const relativeTime = performance.now() / 1000;
-        State.save.basicRankCurrency.forEach((amount, rank) => {
+        State.save.basicRankCurrency.coefficients.forEach((amount, rank) => {
             const vertexRadius = 18;
             const numSides = rank + 3; // rank 0 = triangle, rank 1 = square, etc.
             const x = 40;
