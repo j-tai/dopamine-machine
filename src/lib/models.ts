@@ -581,7 +581,7 @@ export function updateUpgradePhysicsTick(deltaSeconds: number) {
 		.scale(1 / nodes.length);
 }
 
-export function updateUpgradePhysics(_deltaSeconds: number) {
+export function updateUpgradePhysics() {
 	const NUM_ITERATIONS = 10;
 	for (let i = 0; i < NUM_ITERATIONS; i++) {
 		updateUpgradePhysicsTick(FIXED_DT);
@@ -592,7 +592,7 @@ export function updateAll(dt: number) {
 	dt = Math.min(1.0, Math.max(1e-9, dt)); // clamp to a sane but permissive range
 	regenerateDependencyGraph(true);
 	updatePhysics(Math.min(dt, 0.1));
-	updateUpgradePhysics(dt);
+	updateUpgradePhysics();
 	if (State.save.latch % 100 === 0) {
 		autoSaveLoad();
 	}

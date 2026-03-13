@@ -1,4 +1,4 @@
-import Entity, { type RenderParams, type TickParams } from '$lib/entity';
+import Entity, { type RenderParams } from '$lib/entity';
 import Vec2 from '$lib/vec2';
 
 export default class Grid extends Entity {
