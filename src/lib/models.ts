@@ -64,8 +64,7 @@ export function canAfford(cost: Polynomial): boolean {
 
 /** Subtracts `cost` from State.save.basicRankCurrency. Assumes caller checked canAfford. */
 export function applyCost(cost: Polynomial): void {
-	// Work on a copy so we can re-normalize and assign back
-	State.save.basicRankCurrency.subtract(cost);
+	State.save.basicRankCurrency = State.save.basicRankCurrency.sub(cost);
 }
 
 /** Attempt to purchase an upgrade by id. Returns success boolean and optional reason. */
@@ -99,7 +98,7 @@ export const State = {
 		/** counter used as a heuristic to prevent overwriting a newer save */
 		latch: 0,
 		/** how much of each currency you own */
-		basicRankCurrency: Polynomial.zero(),
+		basicRankCurrency: Polynomial.ZERO,
 		/** backwards edges (aka all prerequisites) for each upgrade, used to determine which upgrades are available to purchase */
 		dependencyGraph: new Map<number, number[]>(),
 		/** ids of obtained upgrades */

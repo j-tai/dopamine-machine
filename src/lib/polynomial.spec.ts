@@ -24,17 +24,17 @@ describe('Polynomial', () => {
 		});
 	});
 
-	describe('zero()', () => {
-		it('should create a zero polynomial', () => {
-			const poly = Polynomial.zero();
+	describe('ZERO', () => {
+		it('should be a zero polynomial', () => {
+			const poly = Polynomial.ZERO;
 			expect(poly.length).toBe(0);
 			expect(poly.coefficients).toEqual([]);
 		});
 	});
 
-	describe('one()', () => {
-		it('should create a polynomial equal to 1', () => {
-			const poly = Polynomial.one();
+	describe('ONE', () => {
+		it('should be a polynomial equal to 1', () => {
+			const poly = Polynomial.ONE;
 			expect(poly.length).toBe(1);
 			expect(poly.coefficients).toEqual([1]);
 		});
@@ -60,23 +60,6 @@ describe('Polynomial', () => {
 		});
 	});
 
-	describe('copy()', () => {
-		it('should create an independent copy', () => {
-			const original = new Polynomial([1, 2, 3]);
-			const copy = original.copy();
-			expect(copy.coefficients).toEqual([1, 2, 3]);
-			expect(copy).not.toBe(original);
-		});
-
-		it('should not affect original when copy is modified', () => {
-			const original = new Polynomial([1, 2, 3]);
-			const copy = original.copy();
-			copy.set(0, 99);
-			expect(original.get(0)).toBe(1);
-			expect(copy.get(0)).toBe(99);
-		});
-	});
-
 	describe('length', () => {
 		it('should return 0 for empty polynomial', () => {
 			const poly = new Polynomial();
@@ -89,8 +72,8 @@ describe('Polynomial', () => {
 		});
 
 		it('should update after normalization', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.set(2, 0);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.with(2, 0);
 			expect(poly.length).toBe(2);
 		});
 	});
@@ -115,29 +98,29 @@ describe('Polynomial', () => {
 		});
 	});
 
-	describe('set()', () => {
+	describe('with()', () => {
 		it('should set coefficient at given index', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.set(1, 5);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.with(1, 5);
 			expect(poly.get(1)).toBe(5);
 		});
 
 		it('should expand array when setting higher index', () => {
-			const poly = new Polynomial([1]);
-			poly.set(3, 7);
+			const orig = new Polynomial([1]);
+			const poly = orig.with(3, 7);
 			expect(poly.get(3)).toBe(7);
 			expect(poly.length).toBe(4);
 		});
 
 		it('should normalize after setting to zero', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.set(2, 0);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.with(2, 0);
 			expect(poly.length).toBe(2);
 		});
 
 		it('should handle setting all coefficients to zero', () => {
-			const poly = new Polynomial([1]);
-			poly.set(0, 0);
+			const orig = new Polynomial([1]);
+			const poly = orig.with(0, 0);
 			expect(poly.length).toBe(0);
 		});
 	});
@@ -146,91 +129,91 @@ describe('Polynomial', () => {
 		it('should add two polynomials of same length', () => {
 			const poly1 = new Polynomial([1, 2, 3]);
 			const poly2 = new Polynomial([4, 5, 6]);
-			poly1.add(poly2);
-			expect(poly1.coefficients).toEqual([5, 7, 9]);
+			const result = poly1.add(poly2);
+			expect(result.coefficients).toEqual([5, 7, 9]);
 		});
 
 		it('should add polynomials of different lengths', () => {
 			const poly1 = new Polynomial([1, 2]);
 			const poly2 = new Polynomial([3, 4, 5]);
-			poly1.add(poly2);
-			expect(poly1.coefficients).toEqual([4, 6, 5]);
+			const result = poly1.add(poly2);
+			expect(result.coefficients).toEqual([4, 6, 5]);
 		});
 
 		it('should add to empty polynomial', () => {
 			const poly1 = new Polynomial();
 			const poly2 = new Polynomial([1, 2, 3]);
-			poly1.add(poly2);
-			expect(poly1.coefficients).toEqual([1, 2, 3]);
+			const result = poly1.add(poly2);
+			expect(result.coefficients).toEqual([1, 2, 3]);
 		});
 
 		it('should normalize result with trailing zeros', () => {
 			const poly1 = new Polynomial([1, 2, 3]);
 			const poly2 = new Polynomial([0, 0, -3]);
-			poly1.add(poly2);
-			expect(poly1.coefficients).toEqual([1, 2]);
+			const result = poly1.add(poly2);
+			expect(result.coefficients).toEqual([1, 2]);
 		});
 	});
 
-	describe('subtract()', () => {
+	describe('sub()', () => {
 		it('should subtract two polynomials of same length', () => {
 			const poly1 = new Polynomial([5, 7, 9]);
 			const poly2 = new Polynomial([1, 2, 3]);
-			poly1.subtract(poly2);
-			expect(poly1.coefficients).toEqual([4, 5, 6]);
+			const result = poly1.sub(poly2);
+			expect(result.coefficients).toEqual([4, 5, 6]);
 		});
 
 		it('should subtract polynomials of different lengths', () => {
 			const poly1 = new Polynomial([3, 4, 5]);
 			const poly2 = new Polynomial([1, 2]);
-			poly1.subtract(poly2);
-			expect(poly1.coefficients).toEqual([2, 2, 5]);
+			const result = poly1.sub(poly2);
+			expect(result.coefficients).toEqual([2, 2, 5]);
 		});
 
 		it('should handle negative results', () => {
 			const poly1 = new Polynomial([1, 2]);
 			const poly2 = new Polynomial([3, 4, 5]);
-			poly1.subtract(poly2);
-			expect(poly1.coefficients).toEqual([-2, -2, -5]);
+			const result = poly1.sub(poly2);
+			expect(result.coefficients).toEqual([-2, -2, -5]);
 		});
 
 		it('should normalize result', () => {
 			const poly1 = new Polynomial([1, 2, 3]);
 			const poly2 = new Polynomial([1, 2, 3]);
-			poly1.subtract(poly2);
-			expect(poly1.coefficients).toEqual([]);
+			const result = poly1.sub(poly2);
+			expect(result.coefficients).toEqual([]);
 		});
 	});
 
 	describe('scale()', () => {
 		it('should scale all coefficients by factor', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.scale(2);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.scale(2);
 			expect(poly.coefficients).toEqual([2, 4, 6]);
 		});
 
 		it('should handle negative scaling', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.scale(-1);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.scale(-1);
 			expect(poly.coefficients).toEqual([-1, -2, -3]);
 		});
 
 		it('should handle fractional scaling', () => {
-			const poly = new Polynomial([2, 4, 6]);
-			poly.scale(0.5);
+			const orig = new Polynomial([2, 4, 6]);
+			const poly = orig.scale(0.5);
 			expect(poly.coefficients).toEqual([1, 2, 3]);
 		});
 
 		it('should clear polynomial when scaling by zero', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.scale(0);
+			const orig = new Polynomial([1, 2, 3]);
+			const poly = orig.scale(0);
 			expect(poly.coefficients).toEqual([]);
 			expect(poly.length).toBe(0);
 		});
 
 		it('should handle scaling empty polynomial', () => {
-			const poly = new Polynomial();
-			poly.scale(5);
+			const orig = new Polynomial();
+			const poly = orig.scale(5);
 			expect(poly.coefficients).toEqual([]);
 		});
 	});
@@ -307,8 +290,7 @@ describe('Polynomial', () => {
 
 	describe('edge cases and normalization', () => {
 		it('should handle sparse arrays correctly', () => {
-			const poly = new Polynomial();
-			poly.set(5, 1);
+			const poly = new Polynomial().with(5, 1);
 			expect(poly.get(3)).toBe(0);
 			expect(poly.get(5)).toBe(1);
 		});
@@ -316,16 +298,21 @@ describe('Polynomial', () => {
 		it('should maintain normalization after multiple operations', () => {
 			const poly1 = new Polynomial([1, 2, 3]);
 			const poly2 = new Polynomial([0, 0, 3]);
-			poly1.subtract(poly2);
-			poly1.add(new Polynomial([0, 0, 3]));
-			expect(poly1.coefficients).toEqual([1, 2, 3]);
+			const result = poly1.sub(poly2).add(new Polynomial([0, 0, 3]));
+			expect(result.coefficients).toEqual([1, 2, 3]);
 		});
 
-		it('should handle mutations correctly', () => {
-			const poly = new Polynomial([1, 2, 3]);
-			poly.set(2, 0);
-			poly.set(3, 4);
+		it('should handle changes correctly', () => {
+			const poly = new Polynomial([1, 2, 3]).with(2, 0).with(3, 4);
 			expect(poly.coefficients).toEqual([1, 2, 0, 4]);
+		});
+
+		it('should be immutable', () => {
+			const poly = new Polynomial([1, 2, 3, 4]);
+			poly.with(1, 0).with(2, 1);
+			poly.with(10, 10);
+			poly.add(poly).sub(poly).scale(50);
+			expect(poly.coefficients).toEqual([1, 2, 3, 4]);
 		});
 	});
 });
