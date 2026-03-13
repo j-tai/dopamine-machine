@@ -4,17 +4,9 @@ import World from '$lib/world';
 import { Stats, type Upgrade } from '$lib/upgrades';
 import { getZoneRect, NUM_ZONES } from '$lib/zone';
 import BasicEnemy from '$lib/entity/basicEnemy';
+import Polynomial from '$lib/polynomial';
 
 export type AdjacencyMap = Map<number, number[]>;
-/// Immutable type representing a polynomial, where the value at index i is the coefficient for x^i. For example, [3, 0, 2] represents 3 + 0*x + 2*x^2 (which simplifies to 3 + 2x^2).
-/// Invariants:
-/// 1. The last coefficient must be non-zero, except for the zero polynomial which is represented by an empty array.
-/// 2. Coefficients are integers in normal usage, however, we allow them to be any real number for flexibility in calculations.
-/// We often use them as a list of ambiguously infinite length.
-export type Polynomial = number[];
-
-export const POLY_ZERO: Polynomial = [];
-export const POLY_ONE: Polynomial = [1];
 
 export const UPGRADES_MAX_ADDED_EDGES = 20;
 
@@ -35,33 +27,6 @@ export const PHYSICS = {
 	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
 	MAX_ENEMIES_PER_ZONE: 1000,
 };
-
-export function polyNormalizeInPlace(poly: Polynomial): void {
-	// Remove trailing zeros to maintain the invariant that the last coefficient is non-zero (except for the zero polynomial)
-	while (poly.length > 0 && Math.abs(poly[poly.length - 1]) < 1e-9) {
-		poly.pop();
-	}
-}
-
-export function polyGetAtIndex(poly: Polynomial, index: number): number {
-	return index < poly.length ? poly[index] : 0;
-}
-
-export function polyElementwise(
-	poly1: Polynomial,
-	poly2: Polynomial,
-	operation: (a: number, b: number) => number,
-): Polynomial {
-	const maxLength = Math.max(poly1.length, poly2.length);
-	const result: Polynomial = new Array(maxLength).fill(0);
-	for (let i = 0; i < maxLength; i++) {
-		const coeff1 = polyGetAtIndex(poly1, i);
-		const coeff2 = polyGetAtIndex(poly2, i);
-		result[i] = operation(coeff1, coeff2);
-	}
-	polyNormalizeInPlace(result);
-	return result;
-}
 
 // --- Upgrade / purchase utility helpers ---
 
@@ -94,31 +59,12 @@ export function selectNextAvailable(currentId?: number | null): number | null {
 
 /** Returns true if the provided polynomial cost can be paid by State.save.basicRankCurrency. */
 export function canAfford(cost: Polynomial): boolean {
-	// cost <= currency elementwise
-	return allElementsLe(cost, State.save.basicRankCurrency);
-}
-
-/** Pure math: returns true if for all indices i, a[i] <= b[i]. Missing indices are treated as 0. */
-export function allElementsLe(a: Polynomial, b: Polynomial): boolean {
-	const maxLen = Math.max(a.length, b.length);
-	for (let i = 0; i < maxLen; i++) {
-		if (polyGetAtIndex(a, i) > polyGetAtIndex(b, i)) return false;
-	}
-	return true;
+	return State.save.basicRankCurrency.geq(cost);
 }
 
 /** Subtracts `cost` from State.save.basicRankCurrency. Assumes caller checked canAfford. */
 export function applyCost(cost: Polynomial): void {
-	// Work on a copy so we can re-normalize and assign back
-	const newPoly: Polynomial = State.save.basicRankCurrency.slice();
-	for (let i = 0; i < cost.length; i++) {
-		const prev = polyGetAtIndex(newPoly, i);
-		const c = polyGetAtIndex(cost, i);
-		const updated = prev - c;
-		newPoly[i] = updated;
-	}
-	polyNormalizeInPlace(newPoly);
-	State.save.basicRankCurrency = newPoly;
+	State.save.basicRankCurrency = State.save.basicRankCurrency.sub(cost);
 }
 
 /** Attempt to purchase an upgrade by id. Returns success boolean and optional reason. */
@@ -139,31 +85,10 @@ export function purchaseUpgrade(id: number): { success: boolean; reason?: string
 export function formatCost(cost: Polynomial): { rank: number; amount: number }[] {
 	const out: { rank: number; amount: number }[] = [];
 	for (let i = 0; i < cost.length; i++) {
-		const amt = polyGetAtIndex(cost, i);
+		const amt = cost.get(i);
 		if (amt > 0) out.push({ rank: i, amount: amt });
 	}
 	return out;
-}
-
-export function polyAdd(poly1: Polynomial, poly2: Polynomial): Polynomial {
-	return polyElementwise(poly1, poly2, (a, b) => a + b);
-}
-
-export function polySub(poly1: Polynomial, poly2: Polynomial): Polynomial {
-	return polyElementwise(poly1, poly2, (a, b) => a - b);
-}
-
-export function polyScale(poly: Polynomial, factor: number): Polynomial {
-	const result: Polynomial = poly.map((coeff) => coeff * factor);
-	polyNormalizeInPlace(result);
-	return result;
-}
-
-export function polyOneHot(index: number, value: number): Polynomial {
-	// fill all indices with 0 except the specified index which gets the given value
-	const result: Polynomial = new Array(index + 1).fill(0);
-	result[index] = value;
-	return result;
 }
 
 /** The singleton game state. */
@@ -173,7 +98,7 @@ export const State = {
 		/** counter used as a heuristic to prevent overwriting a newer save */
 		latch: 0,
 		/** how much of each currency you own */
-		basicRankCurrency: [] as Polynomial,
+		basicRankCurrency: Polynomial.ZERO,
 		/** backwards edges (aka all prerequisites) for each upgrade, used to determine which upgrades are available to purchase */
 		dependencyGraph: new Map<number, number[]>(),
 		/** ids of obtained upgrades */
@@ -336,7 +261,7 @@ export function makeUpgradeBulletSpeedMultiplier(index: number): void {
 	const id = 100 + index;
 	const multiplier = 1 + 0.3 * (index + 1);
 	const title = 'Bullet Speed ' + toRomanNumeral(index + 1);
-	const cost = polyOneHot(index, 1500);
+	const cost = Polynomial.fromTerm(index, 1500);
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
@@ -358,7 +283,7 @@ export function makeUpgradeFlySpeedMultiplier(index: number): void {
 	const id = 200 + index;
 	const multiplier = 1 + 0.3 * (index + 1);
 	const title = 'Fly Speed ' + toRomanNumeral(index + 1);
-	const cost = polyOneHot(index, 1500);
+	const cost = Polynomial.fromTerm(index, 1500);
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
@@ -380,7 +305,7 @@ export function makeUpgradeTurningSpeedMultiplier(index: number): void {
 	const id = 300 + index;
 	const multiplier = 1 + 0.3 * (index + 1);
 	const title = 'Turning Speed ' + toRomanNumeral(index + 1);
-	const cost = polyOneHot(index, 1500);
+	const cost = Polynomial.fromTerm(index, 1500);
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
@@ -402,7 +327,7 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 	const id = 400 + index;
 	const multiplier = 1 + 0.1 * (index + 1);
 	const title = 'Fire Rate ' + toRomanNumeral(index + 1);
-	const cost = polyOneHot(index, 5000);
+	const cost = Polynomial.fromTerm(index, 5000);
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
@@ -423,7 +348,7 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 export function makeUpgradeLastUnlockedZone(index: number): void {
 	const id = 500 + index;
 	const title = 'Unlock Zone ' + toRomanNumeral(index + 1);
-	const cost = polyOneHot(index, 1000);
+	const cost = Polynomial.fromTerm(index, 1000);
 	State.upgradeDefinitions.set(id, {
 		id,
 		name: title,
@@ -444,10 +369,10 @@ export function makeUpgradeLastUnlockedZone(index: number): void {
 
 export function regenerateUpgradeDefinitions(): void {
 	// Fix up upgradeDefinitions and baseDependencyGraph. Safe to run multiple times
-	makeUpgradeParallelShots(2, 'Double Shot', polyOneHot(0, 500));
-	makeUpgradeParallelShots(3, 'Triple Shot', polyOneHot(1, 5000));
-	makeUpgradeParallelShots(4, 'Quadruple Shot', polyOneHot(2, 50000));
-	makeUpgradeParallelShots(5, 'Quintuple Shot', polyOneHot(3, 500000));
+	makeUpgradeParallelShots(2, 'Double Shot', Polynomial.fromTerm(0, 500));
+	makeUpgradeParallelShots(3, 'Triple Shot', Polynomial.fromTerm(1, 5000));
+	makeUpgradeParallelShots(4, 'Quadruple Shot', Polynomial.fromTerm(2, 50000));
+	makeUpgradeParallelShots(5, 'Quintuple Shot', Polynomial.fromTerm(3, 500000));
 	for (let i = 0; i < 4; i++) {
 		makeUpgradeBulletSpeedMultiplier(i);
 		makeUpgradeFlySpeedMultiplier(i);
@@ -459,7 +384,7 @@ export function regenerateUpgradeDefinitions(): void {
 		makeUpgradeLastUnlockedZone(i);
 	}
 	// Regenerate UI nodes, initialized to random positions
-	for (const [id, def] of State.upgradeDefinitions) {
+	for (const [id] of State.upgradeDefinitions) {
 		// if node already exists, don't reset it
 		if (State.upgradeUINodes.has(id)) continue;
 		State.upgradeUINodes.set(id, {
@@ -656,7 +581,7 @@ export function updateUpgradePhysicsTick(deltaSeconds: number) {
 		.scale(1 / nodes.length);
 }
 
-export function updateUpgradePhysics(_deltaSeconds: number) {
+export function updateUpgradePhysics() {
 	const NUM_ITERATIONS = 10;
 	for (let i = 0; i < NUM_ITERATIONS; i++) {
 		updateUpgradePhysicsTick(FIXED_DT);
@@ -667,7 +592,7 @@ export function updateAll(dt: number) {
 	dt = Math.min(1.0, Math.max(1e-9, dt)); // clamp to a sane but permissive range
 	regenerateDependencyGraph(true);
 	updatePhysics(Math.min(dt, 0.1));
-	updateUpgradePhysics(dt);
+	updateUpgradePhysics();
 	if (State.save.latch % 100 === 0) {
 		autoSaveLoad();
 	}
