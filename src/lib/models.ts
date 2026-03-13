@@ -1,6 +1,9 @@
 import { gzip, ungzip } from 'pako';
 import Vec2 from '$lib/vec2';
-import Rect from '$lib/rect.js';
+import World from '$lib/world';
+import { Stats, type Upgrade } from '$lib/upgrades';
+import { getZoneRect, NUM_ZONES } from '$lib/zone';
+import BasicEnemy from '$lib/entity/basicEnemy';
 
 export type AdjacencyMap = Map<number, number[]>;
 /// Immutable type representing a polynomial, where the value at index i is the coefficient for x^i. For example, [3, 0, 2] represents 3 + 0*x + 2*x^2 (which simplifies to 3 + 2x^2).
@@ -20,11 +23,6 @@ export const UPGRADES_MAX_ADDED_EDGES = 20;
  */
 export const COLORS = {
 	BACKGROUND: '#340d0dff',
-	GRID: '#602424ff',
-	PLAYER: '#d81b1bff',
-	CROSSHAIR: '#d81b1bff',
-	PLAYER_BULLET: '#d81b1bff',
-	ENEMY_COLOR_BY_RANK: ['#b563f0ff', '#6024d9ff', '#358eedff', '#3ceaf3ff'],
 	BACKGROUND_UPGRADES: '#130b3fff',
 	UPGRADE_COLOR: '#6b4fe9ff',
 };
@@ -33,34 +31,10 @@ export const COLORS = {
  * Global Physics Constants
  */
 export const PHYSICS = {
-	PLAYER_TURNING_RADIANS_PER_SECOND: 6,
-	PLAYER_MOVING_UNITS_PER_SECOND: 100,
-	PLAYER_SECONDS_PER_SHOT: 0.5,
-	PLAYER_BULLET_SPEED: 400,
-	PLAYER_BULLET_LIFETIME_SECONDS: 1.0,
-	BASIC_ENEMY_RADIUS: 30,
 	// Each zone is a tall strip
-	WIDTH_PER_ZONE: 4000,
-	HEIGHT_FOR_PLAYER: 12_000,
-	HEIGHT_FOR_ENEMIES: 16_000,
 	PLAYER_SAFE_NO_SPAWN_RADIUS: 2000,
 	MAX_ENEMIES_PER_ZONE: 1000,
-	CAMERA_DRAG_RATE: 2,
-	CAMERA_SOFT_THRESHOLD: 100,
-	CAMERA_HARD_THRESHOLD: 300,
 };
-
-/**
- * Global Economy Constants
- */
-export const ECONOMY = {
-	ON_KILL_CURRENCY_SCALE: 100,
-};
-
-export function randomUnitVector(): Vec2 {
-	const angle = Math.random() * 2 * Math.PI;
-	return new Vec2(Math.cos(angle), Math.sin(angle));
-}
 
 export function polyNormalizeInPlace(poly: Polynomial): void {
 	// Remove trailing zeros to maintain the invariant that the last coefficient is non-zero (except for the zero polynomial)
@@ -149,14 +123,15 @@ export function applyCost(cost: Polynomial): void {
 
 /** Attempt to purchase an upgrade by id. Returns success boolean and optional reason. */
 export function purchaseUpgrade(id: number): { success: boolean; reason?: string } {
-	if (State.save.obtainedUpgrades.includes(id)) return { success: false, reason: 'already_obtained' };
+	if (State.save.obtainedUpgrades.includes(id))
+		return { success: false, reason: 'already_obtained' };
 	if (!isPrereqsSatisfied(id)) return { success: false, reason: 'prereqs_not_satisfied' };
 	const def = getUpgradeDef(id);
 	if (!def) return { success: false, reason: 'not_found' };
 	if (!canAfford(def.cost)) return { success: false, reason: 'insufficient_funds' };
 	applyCost(def.cost);
 	State.save.obtainedUpgrades.push(id);
-	def.applyUpgrade();
+	def.apply(State.world.player.stats);
 	return { success: true };
 }
 
@@ -191,154 +166,6 @@ export function polyOneHot(index: number, value: number): Polynomial {
 	return result;
 }
 
-/** Returns the bounding box of the specified zone. */
-export function getZoneRect(zone: number, isPlayer: boolean): Rect {
-	// Zone 0 is centered at (0, 0), zone 1 is directly to the right, etc.
-	const centerX = PHYSICS.WIDTH_PER_ZONE * zone;
-	const width = PHYSICS.WIDTH_PER_ZONE;
-	const height = isPlayer ? PHYSICS.HEIGHT_FOR_PLAYER : PHYSICS.HEIGHT_FOR_ENEMIES;
-
-	return Rect.fromCenterAndSize(new Vec2(centerX, 0), new Vec2(width, height));
-}
-
-export function getMultiZoneRect(startZone: number, stopZone: number, isPlayer: boolean): Rect {
-	const centerX = PHYSICS.WIDTH_PER_ZONE * (startZone + stopZone - 1) / 2;
-	const width = PHYSICS.WIDTH_PER_ZONE * (stopZone - startZone);
-	const height = isPlayer ? PHYSICS.HEIGHT_FOR_PLAYER : PHYSICS.HEIGHT_FOR_ENEMIES;
-
-	return Rect.fromCenterAndSize(new Vec2(centerX, 0), new Vec2(width, height));
-}
-
-/**
- * Tests whether a line segment (not an infinite line!) intersects with a circle.
- *
- * @param lineStart The start point of the line segment.
- * @param lineEnd The end point of the line segment.
- * @param circleCenter The center point of the circle.
- * @param circleRadius The radius of the circle.
- * @returns True if the line segment intersects with the circle, false otherwise.
- */
-export function testLineSegmentCircleIntersection(
-	lineStart: Vec2,
-	lineEnd: Vec2,
-	circleCenter: Vec2,
-	circleRadius: number,
-): boolean {
-	const lineDir = lineEnd.sub(lineStart);
-	const toCircle = circleCenter.sub(lineStart);
-	const lineLength = lineDir.length();
-	if (lineLength === 0) {
-		// Line segment is a point, check if it's inside the circle
-		return toCircle.length() <= circleRadius;
-	}
-	const lineUnit = lineDir.scale(1 / lineLength);
-	const projectionLength = toCircle.dot(lineUnit);
-	if (projectionLength < 0) {
-		// Closest point is lineStart
-		return toCircle.length() <= circleRadius;
-	} else if (projectionLength > lineLength) {
-		// Closest point is lineEnd
-		return circleCenter.sub(lineEnd).length() <= circleRadius;
-	}
-	const closestPoint = lineStart.add(lineUnit.scale(projectionLength));
-	return circleCenter.sub(closestPoint).length() <= circleRadius;
-}
-
-export type Bullet = {
-	position: Vec2;
-	velocity: Vec2;
-	lifetime: number; // seconds remaining
-};
-
-/**
- * Basic enemies don't fight back.
- */
-export type BasicEnemy = {
-	rank: number; // 0-indexed. 0 is the weakest
-	position: Vec2;
-	facingDirection: Vec2;
-	maxHealth: number;
-	currentHealth: number;
-	/// Cache visibility calculations
-	isVisible?: boolean;
-};
-
-/**
- * Smoothly rotates a unit vector towards a target direction.
- *
- * Guarantees:
- * 1. Returns a valid unit vector even if inputs are Zero or NaN.
- * 2. If target is invalid/zero, returns the normalized original.
- * 3. Limits rotation by maxRadians, choosing the shortest arc (clockwise vs counter-clockwise).
- * 4. If the angle to target is less than maxRadians, it snaps exactly to the target to prevent jitter.
- * @param original The current direction vector.
- * @param target The desired direction vector.
- * @param maxRadians Maximum rotation allowed in this step.
- */
-export function turnUnitVectorToward(original: Vec2, target: Vec2, maxRadians: number): Vec2 {
-	const start = original.length() < 1e-9 ? new Vec2(1, 0) : original.normalize();
-	const dest = target.length() < 1e-9 ? start : target.normalize();
-
-	const startAngle = start.angle();
-	const destAngle = dest.angle();
-
-	// Find the shortest signed difference between angles (-PI to PI)
-	let diff = destAngle - startAngle;
-	while (diff > Math.PI) diff -= 2 * Math.PI;
-	while (diff < -Math.PI) diff += 2 * Math.PI;
-
-	// If within reach, snap to target
-	if (Math.abs(diff) <= maxRadians) {
-		return dest;
-	}
-
-	// Otherwise, turn as much as allowed in the correct direction
-	const actualTurn = Math.sign(diff) * maxRadians;
-	return Vec2.fromAngle(startAngle + actualTurn);
-}
-
-/**
- * Drags a vector toward a target position.
- *
- * @param current The current position of the object.
- * @param target The target position to drag toward.
- * @param dragFactor The factor by which to drag the object (0 = no drag, 1 = snap to target).
- * @param softThreshold The distance at which dragging starts to take effect. Closer than this threshold, the current vector is returned unchanged.
- * @param hardThreshold The resulting vector is guaranteed to be at most this many units away from the target.
- */
-export function dragVectorTowards(
-	current: Vec2,
-	target: Vec2,
-	dragFactor: number,
-	softThreshold: number,
-	hardThreshold: number,
-): Vec2 {
-	const toTarget = target.sub(current);
-	const toTargetLength = toTarget.length();
-	if (toTargetLength < softThreshold) {
-		return current; // within soft threshold, don't apply drag
-	}
-	if (toTargetLength > hardThreshold) {
-		return target.add(toTarget.normalize().scale(-hardThreshold)); // beyond hard threshold, clamp to hard threshold
-	}
-	dragFactor = Math.max(0, Math.min(1, dragFactor)); // clamp drag factor to [0, 1]
-	const dragAmount =
-		(toTargetLength * dragFactor * (toTargetLength - softThreshold)) /
-		(hardThreshold - softThreshold); // scale drag amount based on distance within thresholds
-	return current.add(toTarget.normalize().scale(dragAmount));
-}
-
-export const CLEAN_UPGRADE_CACHE = {
-	mainWeaponParallelShots: 1,
-	playerBulletSpeedMultiplier: 1,
-	playerFlySpeedMultiplier: 1,
-	playerTurningSpeedMultiplier: 1,
-	playerFireRateMultiplier: 1,
-	lastUnlockedZone: 0,
-};
-
-export type UpgradeCacheType = typeof CLEAN_UPGRADE_CACHE;
-
 /** The singleton game state. */
 export const State = {
 	/** The data that is persisted to the save file. */
@@ -352,51 +179,23 @@ export const State = {
 		/** ids of obtained upgrades */
 		obtainedUpgrades: [] as number[],
 	},
-	upgradeCache: structuredClone(CLEAN_UPGRADE_CACHE) as UpgradeCacheType,
+
+	world: new World(),
 
 	// UI selection state (MVP): currently selected upgrade id in UI, or null
 	selectedUpgradeId: null as number | null,
 
 	canvasWidthHeight: new Vec2(800, 600),
-	/** The area of the world currently visible on screen, used for culling. Centered on the camera position. */
-	worldSpaceClip: Rect.fromCenterAndSize(Vec2.ZERO, new Vec2(800, 600)),
-	cameraScale: 2, // 1 world unit = this many screen pixels
-	targetCameraScale: 2,
-	cameraPosition: Vec2.ZERO,
-	playerPosition: Vec2.ZERO,
-	facingDirection: new Vec2(1, 0),
 	screenMousePosition: Vec2.ZERO, // Mouse position in world scale but not shifted by camera
 	mousePosition: Vec2.ZERO, // World-space mouse position
-	playerBullets: [] as Bullet[],
-	playerShootingCharge: 0,
-	basicEnemies: [] as BasicEnemy[],
-	basicEnemyInitialHealthByRank: [3, 10, 50, 500],
-	basicEnemySpeedByRank: [10, 20, 35, 60],
-	upgradeDefinitions: new Map<
-		number,
-		{
-			/** Unique identifier for the upgrade, should fit in a 31-bit integer */
-			id: number;
-			/** The name of the upgrade */
-			name: string;
-			/** The description of the upgrade */
-			description: string;
-			/** The cost of the upgrade */
-			cost: Polynomial;
-			/**
-			 * Function to be run when the upgrade is obtained.
-			 * Should apply the upgrade's effects to the game state.
-			 * It should be safe to run this function multiple times, and out of order.
-			 */
-			applyUpgrade: () => void;
-		}
-	>(),
+	upgradeDefinitions: new Map<number, Upgrade>(),
 	/** forward edges, minimal graph. used to generate dependencyGraph */
 	baseDependencyGraph: new Map<number, number[]>(),
 	/** used in the UI for automatic force directed layout of upgrades. maps IDs to nodes that can wiggle around */
 	upgradeUINodes: new Map<number, { position: Vec2; velocity: Vec2 }>(),
 	upgradeUICenter: Vec2.ZERO, // average position of all upgrade nodes, used to center UI
 };
+export type State = typeof State;
 type SaveDataType = typeof State.save;
 
 const MAP_PREFIX = '__Map__';
@@ -467,11 +266,12 @@ export function autoSaveLoad(): void {
 }
 
 export function reapplyAllUpgrades(): void {
-	Object.assign(State.upgradeCache, CLEAN_UPGRADE_CACHE);
+	const newStats = new Stats();
 	State.save.obtainedUpgrades.forEach((id) => {
 		const def = getUpgradeDef(id);
-		def?.applyUpgrade();
+		def?.apply(newStats);
 	});
+	State.world.player.stats = newStats;
 }
 
 export function addBaseDependency(prereqId: number, upgradeId: number): void {
@@ -509,7 +309,7 @@ export const UPGRADE_ID_DOUBLE_SHOT = 2;
 export function autoDependencies(upgradeId: number, cost: Polynomial): void {
 	// It is possible to farm squares (rank 1) without actually unlocking zone 1, by sitting on the border
 	// But it would not be possible to farm pentagons (rank 2) without unlocking zone 1 first
-	if(cost.length > 2) {
+	if (cost.length > 2) {
 		// Need to unlock zone to possibly farm that currency
 		addBaseDependency(500 + (cost.length - 2), upgradeId);
 	}
@@ -522,11 +322,8 @@ export function makeUpgradeParallelShots(nshots: number, title: string, cost: Po
 		name: title,
 		description: `Main weapon now shoots ${nshots} bullets in parallel.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.mainWeaponParallelShots = Math.max(
-				State.upgradeCache.mainWeaponParallelShots,
-				nshots,
-			);
+		apply(stats) {
+			stats.mainWeaponParallelShots = Math.max(stats.mainWeaponParallelShots, nshots);
 		},
 	});
 	if (nshots > 2) {
@@ -545,11 +342,8 @@ export function makeUpgradeBulletSpeedMultiplier(index: number): void {
 		name: title,
 		description: `Main weapon bullet speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.playerBulletSpeedMultiplier = Math.max(
-				State.upgradeCache.playerBulletSpeedMultiplier,
-				multiplier,
-			);
+		apply(stats) {
+			stats.bulletSpeedMultiplier = Math.max(stats.bulletSpeedMultiplier, multiplier);
 		},
 	});
 	if (index > 0) {
@@ -570,11 +364,8 @@ export function makeUpgradeFlySpeedMultiplier(index: number): void {
 		name: title,
 		description: `Player fly speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.playerFlySpeedMultiplier = Math.max(
-				State.upgradeCache.playerFlySpeedMultiplier,
-				multiplier,
-			);
+		apply(stats) {
+			stats.flySpeedMultiplier = Math.max(stats.flySpeedMultiplier, multiplier);
 		},
 	});
 	if (index > 0) {
@@ -595,11 +386,8 @@ export function makeUpgradeTurningSpeedMultiplier(index: number): void {
 		name: title,
 		description: `Player turning speed is increased to ${formatPercent(multiplier)}.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.playerTurningSpeedMultiplier = Math.max(
-				State.upgradeCache.playerTurningSpeedMultiplier,
-				multiplier,
-			);
+		apply(stats) {
+			stats.turningSpeedMultiplier = Math.max(stats.turningSpeedMultiplier, multiplier);
 		},
 	});
 	if (index > 0) {
@@ -620,11 +408,8 @@ export function makeUpgradeFireRateMultiplier(index: number): void {
 		name: title,
 		description: `Main weapon firing rate is increased to ${formatPercent(multiplier)}.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.playerFireRateMultiplier = Math.max(
-				State.upgradeCache.playerFireRateMultiplier,
-				multiplier,
-			);
+		apply(stats) {
+			stats.fireRateMultiplier = Math.max(stats.fireRateMultiplier, multiplier);
 		},
 	});
 	if (index > 0) {
@@ -644,11 +429,8 @@ export function makeUpgradeLastUnlockedZone(index: number): void {
 		name: title,
 		description: `Unlocks zone ${index + 1}.`,
 		cost,
-		applyUpgrade: () => {
-			State.upgradeCache.lastUnlockedZone = Math.max(
-				State.upgradeCache.lastUnlockedZone,
-				index,
-			);
+		apply(stats) {
+			stats.lastUnlockedZone = Math.max(stats.lastUnlockedZone, index);
 		},
 	});
 	if (index > 1) {
@@ -671,7 +453,7 @@ export function regenerateUpgradeDefinitions(): void {
 		makeUpgradeFlySpeedMultiplier(i);
 		makeUpgradeTurningSpeedMultiplier(i);
 		makeUpgradeFireRateMultiplier(i);
-		if(i == 0) {
+		if (i == 0) {
 			continue;
 		}
 		makeUpgradeLastUnlockedZone(i);
@@ -727,7 +509,7 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 	for (let i = 0; i < topoOrder.length; i++) {
 		// Chain-like algorithm biased to nearby nodes
 		let j = i + 1;
-		if(j < topoOrder.length) {
+		if (j < topoOrder.length) {
 			candidates.push([topoOrder[i], topoOrder[j]]);
 		}
 		j += 1 + Math.floor(Math.random() * 3);
@@ -775,157 +557,13 @@ export function regenerateDependencyGraph(firstTimeOnly: boolean): void {
 	State.save.dependencyGraph = dependencyGraph;
 }
 
-export function parallelShotPositions(startPosition: Vec2, facingDirection: Vec2, numShots: number): Vec2[] {
-	const shotPositions: Vec2[] = [];
-	const spreadUnit = facingDirection.rotate90deg().scale(8 / numShots);
+export function updatePhysics(delta: number) {
+	State.world.tick(delta, State);
+	State.world.prune(State);
 
-	for (let i = 0; i < numShots; i++) {
-		shotPositions.push(startPosition.add(spreadUnit.scale(numShots - 1 - 2 * i)));
-	}
-	return shotPositions;
-}
-
-export function createBasicEnemy(rank: number): BasicEnemy {
-	return {
-		rank,
-		position: Vec2.ZERO,
-		facingDirection: new Vec2(1, 0),
-		maxHealth: State.basicEnemyInitialHealthByRank[rank],
-		currentHealth: State.basicEnemyInitialHealthByRank[rank],
-		isVisible: false,
-	};
-}
-
-export function onEnemyKilled(enemy: BasicEnemy) {
-	// Grant currency based on enemy rank
-	State.save.basicRankCurrency = polyAdd(
-		State.save.basicRankCurrency,
-		polyOneHot(enemy.rank, ECONOMY.ON_KILL_CURRENCY_SCALE),
-	);
-}
-
-export function updateBullet(deltaSeconds: number, bullet: Bullet): Bullet {
-	const newPosition = bullet.position.add(bullet.velocity.scale(deltaSeconds));
-	for (const enemy of State.basicEnemies) {
-		// skip already dead enemies
-		if (enemy.currentHealth <= 0) continue;
-		// perform line-segment to circle intersection test to see if we hit an enemy
-		if (
-			testLineSegmentCircleIntersection(
-				bullet.position,
-				newPosition,
-				enemy.position,
-				PHYSICS.BASIC_ENEMY_RADIUS,
-			)
-		) {
-			// hit! apply damage and end the bullet's life
-			enemy.currentHealth -= 1;
-			bullet.lifetime = 0;
-			break; // stop checking other enemies since the bullet is now dead
-		}
-	}
-	// update fields
-	bullet.position = newPosition;
-	bullet.lifetime -= deltaSeconds;
-	return bullet;
-}
-
-export function updatePhysics(deltaSeconds: number) {
-	// Turn player toward mouse
-	const toMouse = State.mousePosition.sub(State.playerPosition);
-	State.facingDirection = turnUnitVectorToward(
-		State.facingDirection,
-		toMouse,
-		PHYSICS.PLAYER_TURNING_RADIANS_PER_SECOND *
-			deltaSeconds *
-			State.upgradeCache.playerTurningSpeedMultiplier,
-	);
-	// Move player forward
-	const movement = State.facingDirection.scale(
-		PHYSICS.PLAYER_MOVING_UNITS_PER_SECOND *
-			deltaSeconds *
-			State.upgradeCache.playerFlySpeedMultiplier,
-	);
-	State.playerPosition = State.playerPosition.add(movement);
-	// Clamp player to arena
-	State.playerPosition = getMultiZoneRect(0, State.upgradeCache.lastUnlockedZone + 1, true).clamp(State.playerPosition);
-	// Should the player shoot?
-	const modifiedSecondsPerShot =
-		PHYSICS.PLAYER_SECONDS_PER_SHOT / State.upgradeCache.playerFireRateMultiplier;
-	State.playerShootingCharge += deltaSeconds;
-	const forwardParallelShotPositions = parallelShotPositions(
-		State.playerPosition,
-		State.facingDirection,
-		State.upgradeCache.mainWeaponParallelShots,
-	);
-	while (State.playerShootingCharge >= modifiedSecondsPerShot) {
-		State.playerShootingCharge -= modifiedSecondsPerShot;
-		forwardParallelShotPositions.forEach((shotPos) => {
-			let bullet = {
-				position: shotPos,
-				velocity: State.facingDirection.scale(
-					PHYSICS.PLAYER_BULLET_SPEED * State.upgradeCache.playerBulletSpeedMultiplier,
-				),
-				lifetime: PHYSICS.PLAYER_BULLET_LIFETIME_SECONDS,
-			};
-			State.playerBullets.push(bullet);
-			// apply excess time immediately
-			bullet = updateBullet(State.playerShootingCharge, bullet);
-		});
-	}
-	// Update bullets and remove expired ones
-	State.playerBullets = State.playerBullets
-		.map((bullet) => updateBullet(deltaSeconds, bullet))
-		.filter((bullet) => bullet.lifetime > 0);
-	// Tick all enemies
-	const cullingBounds = State.worldSpaceClip.grow(PHYSICS.BASIC_ENEMY_RADIUS * 2);
-	for (const enemy of State.basicEnemies) {
-		// apply velocity, reflecting off their arena bounds
-		const enemyBounds = getZoneRect(enemy.rank, false);
-		const enemyVelocity = enemy.facingDirection.scale(State.basicEnemySpeedByRank[enemy.rank]);
-		let newPosition = enemy.position.add(enemyVelocity.scale(deltaSeconds));
-		// calculate accurate reflection if we would go out of bounds
-		if (newPosition.x < enemyBounds.minX) {
-			newPosition = new Vec2(
-				enemyBounds.minX + (enemyBounds.minX - newPosition.x),
-				newPosition.y,
-			);
-			enemy.facingDirection = new Vec2(-enemy.facingDirection.x, enemy.facingDirection.y);
-		} else if (newPosition.x > enemyBounds.maxX) {
-			newPosition = new Vec2(
-				enemyBounds.maxX + (enemyBounds.maxX - newPosition.x),
-				newPosition.y,
-			);
-			enemy.facingDirection = new Vec2(-enemy.facingDirection.x, enemy.facingDirection.y);
-		}
-		if (newPosition.y < enemyBounds.minY) {
-			newPosition = new Vec2(
-				newPosition.x,
-				enemyBounds.minY + (enemyBounds.minY - newPosition.y),
-			);
-			enemy.facingDirection = new Vec2(enemy.facingDirection.x, -enemy.facingDirection.y);
-		} else if (newPosition.y > enemyBounds.maxY) {
-			newPosition = new Vec2(
-				newPosition.x,
-				enemyBounds.maxY + (enemyBounds.maxY - newPosition.y),
-			);
-			enemy.facingDirection = new Vec2(enemy.facingDirection.x, -enemy.facingDirection.y);
-		}
-		enemy.position = newPosition;
-		// recalculate culling
-		enemy.isVisible = cullingBounds.contains(enemy.position);
-	}
-	// Remove dead enemies and trigger on kill effects
-	State.basicEnemies = State.basicEnemies.filter((enemy) => {
-		if (enemy.currentHealth <= 0) {
-			onEnemyKilled(enemy);
-			return false;
-		}
-		return true;
-	});
 	// If any zones are not at their max population, attempt to spawn new enemies
-	for (let zone = 0; zone < State.basicEnemyInitialHealthByRank.length; zone++) {
-		let zoneEnemyCount = State.basicEnemies.filter((enemy) => enemy.rank === zone).length;
+	for (let zone = 0; zone < NUM_ZONES; zone++) {
+		let zoneEnemyCount = State.world.enemies.filter((enemy) => enemy.rank === zone).length;
 		const zoneBounds = getZoneRect(zone, false);
 		while (zoneEnemyCount < PHYSICS.MAX_ENEMIES_PER_ZONE) {
 			// Choose a random location within the zone that is outside the player's safe radius
@@ -934,31 +572,14 @@ export function updatePhysics(deltaSeconds: number) {
 				zoneBounds.minY + Math.random() * zoneBounds.size.y,
 			);
 			if (
-				randomPoint.sub(State.playerPosition).length() > PHYSICS.PLAYER_SAFE_NO_SPAWN_RADIUS
+				randomPoint.sub(State.world.player.position).length() >
+				PHYSICS.PLAYER_SAFE_NO_SPAWN_RADIUS
 			) {
-				const newEnemy = createBasicEnemy(zone);
-				newEnemy.position = randomPoint;
-				newEnemy.facingDirection = randomUnitVector();
-				State.basicEnemies.push(newEnemy);
+				State.world.enemies.push(new BasicEnemy(zone, randomPoint));
 				zoneEnemyCount++;
 			}
 		}
 	}
-}
-
-export function updateCamera(deltaSeconds: number) {
-	State.cameraPosition = dragVectorTowards(
-		State.cameraPosition,
-		State.playerPosition,
-		PHYSICS.CAMERA_DRAG_RATE * deltaSeconds,
-		PHYSICS.CAMERA_SOFT_THRESHOLD,
-		PHYSICS.CAMERA_HARD_THRESHOLD,
-	);
-	State.mousePosition = State.screenMousePosition.add(State.cameraPosition);
-	State.worldSpaceClip = Rect.fromCenterAndSize(
-		State.cameraPosition,
-		State.canvasWidthHeight.scale(1 / State.cameraScale),
-	);
 }
 
 const SPRING_LENGTH = 100;
@@ -1042,15 +663,11 @@ export function updateUpgradePhysics(_deltaSeconds: number) {
 	}
 }
 
-export function updateAll(deltaSeconds: number) {
-	deltaSeconds = Math.min(1.0, Math.max(1e-9, deltaSeconds)); // clamp to a sane but permissive range
-	const CAMERA_SCALE_LERP_RATE = 0.1;
-	State.targetCameraScale = 2 / (1 + 0.1 * State.save.obtainedUpgrades.length); // zoom out as you get more upgrades
-	State.cameraScale += (State.targetCameraScale - State.cameraScale) * Math.min(1, deltaSeconds * CAMERA_SCALE_LERP_RATE); // smooth camera zoom
+export function updateAll(dt: number) {
+	dt = Math.min(1.0, Math.max(1e-9, dt)); // clamp to a sane but permissive range
 	regenerateDependencyGraph(true);
-	updateCamera(deltaSeconds);
-	updatePhysics(Math.min(deltaSeconds, 0.1));
-	updateUpgradePhysics(deltaSeconds);
+	updatePhysics(Math.min(dt, 0.1));
+	updateUpgradePhysics(dt);
 	if (State.save.latch % 100 === 0) {
 		autoSaveLoad();
 	}
